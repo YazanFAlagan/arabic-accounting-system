@@ -1,36 +1,118 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# نظام المحاسبة والمخزون العربي
 
-## Getting Started
+نظام محاسبة ومخزون شامل باللغة العربية مبني باستخدام Next.js و Supabase.
 
-First, run the development server:
+## المميزات
 
+- **واجهة عربية كاملة**: جميع النصوص والتسميات باللغة العربية مع دعم RTL
+- **إدارة المبيعات**: تسجيل وتتبع جميع المبيعات مع تفاصيل العملاء
+- **إدارة المشتريات والمصروفات**: تسجيل المشتريات والمصروفات العامة
+- **إدارة المخزون**: متابعة المخزون مع تنبيهات المخزون المنخفض
+- **تحليل الأرباح والخسائر**: تقارير مالية مفصلة مع رسوم بيانية
+- **أفضل المنتجات مبيعاً**: تحليل أداء المنتجات والاتجاهات
+- **لوحة تحكم شاملة**: عرض جميع المؤشرات الرئيسية
+- **تصميم متجاوب**: يعمل على الهاتف المحمول والحاسوب
+- **المصادقة الآمنة**: نظام تسجيل دخول آمن عبر Supabase
+
+## التقنيات المستخدمة
+
+- **Frontend**: Next.js 15 مع TypeScript
+- **Styling**: Tailwind CSS
+- **Database & Auth**: Supabase
+- **Charts**: Recharts
+- **Icons**: Lucide React
+- **Currency**: الجنيه المصري (EGP)
+
+## التثبيت والتشغيل
+
+### المتطلبات المسبقة
+
+- Node.js 18+ 
+- npm أو yarn
+- حساب Supabase
+
+### خطوات التثبيت
+
+1. **استنساخ المشروع**:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd arabic-accounting-system
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. **تثبيت التبعيات**:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. **إعداد متغيرات البيئة**:
+```bash
+cp .env.example .env.local
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. **تحديث متغيرات البيئة** في `.env.local`:
+```
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-## Learn More
+5. **إعداد قاعدة البيانات**:
+   - اذهب إلى لوحة تحكم Supabase
+   - نفذ الأوامر الموجودة في `DATABASE_SCHEMA.md`
 
-To learn more about Next.js, take a look at the following resources:
+6. **تشغيل الخادم المحلي**:
+```bash
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+7. **فتح التطبيق**: اذهب إلى `http://localhost:3000`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## إعداد قاعدة البيانات
 
-## Deploy on Vercel
+راجع ملف `DATABASE_SCHEMA.md` للحصول على تعليمات مفصلة لإعداد قاعدة البيانات.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## النشر
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### النشر على Vercel
+
+1. ادفع الكود إلى GitHub
+2. اربط المستودع بـ Vercel
+3. أضف متغيرات البيئة في إعدادات Vercel
+4. انشر التطبيق
+
+### النشر على منصات أخرى
+
+يمكن نشر التطبيق على أي منصة تدعم Next.js مثل:
+- Netlify
+- Railway
+- DigitalOcean App Platform
+
+## الاستخدام
+
+### إنشاء المستخدمين
+
+1. اذهب إلى لوحة تحكم Supabase
+2. في قسم Authentication > Users
+3. أضف المستخدمين المطلوبين (أنت وشريكك)
+
+### البدء
+
+1. سجل الدخول باستخدام البريد الإلكتروني وكلمة المرور
+2. ابدأ بإضافة المنتجات في قسم المخزون
+3. سجل المبيعات والمشتريات
+4. راقب التقارير والإحصائيات في لوحة التحكم
+
+## المساهمة
+
+نرحب بالمساهمات! يرجى:
+1. عمل Fork للمشروع
+2. إنشاء فرع جديد للميزة
+3. تنفيذ التغييرات
+4. إرسال Pull Request
+
+## الدعم
+
+للحصول على الدعم أو الإبلاغ عن مشاكل، يرجى إنشاء Issue في GitHub.
+
+## الترخيص
+
+هذا المشروع مرخص تحت رخصة MIT.
