@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import QuickNavigation from '@/components/QuickNavigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { Plus, Search, Edit, Trash2, ShoppingCart } from 'lucide-react'
 
@@ -190,8 +191,8 @@ export default function SalesPage() {
   }
 
   const filteredSales = sales.filter(sale =>
-    sale.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    sale.customer_name.toLowerCase().includes(searchTerm.toLowerCase())
+    sale.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    sale.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const formatCurrency = (amount: number) => {
@@ -216,7 +217,10 @@ export default function SalesPage() {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
+      <QuickNavigation />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -464,6 +468,8 @@ export default function SalesPage() {
             <p className="mt-1 text-sm text-gray-500">ابدأ بإضافة مبيعة جديدة</p>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   )

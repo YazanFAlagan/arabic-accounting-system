@@ -1,0 +1,126 @@
+/* إجبار النصوص على اللون الأسود - قواعد قوية جداً للمدخلات فقط */
+
+/* قاعدة محددة للمدخلات فقط - لا تؤثر على العناوين */
+input,
+textarea, 
+select {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  -moz-text-fill-color: #000000 !important;
+  text-fill-color: #000000 !important;
+}
+
+/* استثناء العناوين والنصوص العادية من التأثير */
+h1, h2, h3, h4, h5, h6,
+p, span, div, label,
+.text-gray-900,
+.text-red-600,
+.text-blue-600,
+.text-green-600,
+.text-purple-600,
+.text-indigo-600 {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+/* قواعد محددة لكل نوع مدخل */
+input[type="text"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+input[type="email"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+input[type="password"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+input[type="number"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+input[type="date"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+input[type="datetime-local"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+input[type="search"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+input[type="tel"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+input[type="url"] { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+textarea { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+select { color: #000000 !important; -webkit-text-fill-color: #000000 !important; }
+
+/* إصلاح للمدخلات داخل containers مع classes معينة فقط */
+div input, div textarea, div select,
+form input, form textarea, form select {
+  color: #000000 !important; 
+  -webkit-text-fill-color: #000000 !important; 
+}
+
+/* إصلاح للمدخلات مع أي class */
+input.text-gray-100, input.text-gray-200, input.text-gray-300, input.text-gray-400, input.text-gray-500, input.text-gray-600, input.text-gray-700, input.text-gray-800, input.text-gray-900 {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+textarea.text-gray-100, textarea.text-gray-200, textarea.text-gray-300, textarea.text-gray-400, textarea.text-gray-500, textarea.text-gray-600, textarea.text-gray-700, textarea.text-gray-800, textarea.text-gray-900 {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+select.text-gray-100, select.text-gray-200, select.text-gray-300, select.text-gray-400, select.text-gray-500, select.text-gray-600, select.text-gray-700, select.text-gray-800, select.text-gray-900 {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* إصلاح محدد للمدخلات فقط داخل containers */
+.form-group input, .form-group textarea, .form-group select,
+.input-group input, .input-group textarea, .input-group select {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* إصلاح خاص للـ focus states */
+input:focus, textarea:focus, select:focus {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* إصلاح للـ options في select */
+select option {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  background-color: white !important;
+}
+
+/* إصلاح للـ placeholder - يبقى رمادي */
+input::placeholder, textarea::placeholder {
+  color: #6b7280 !important;
+  -webkit-text-fill-color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+/* إصلاح للمدخلات المعطلة */
+input:disabled, textarea:disabled, select:disabled {
+  color: #374151 !important;
+  -webkit-text-fill-color: #374151 !important;
+}
+
+/* قواعد خاصة للمتصفحات المختلفة */
+@-moz-document url-prefix() {
+  input, textarea, select {
+    color: #000000 !important;
+  }
+}
+
+/* إصلاح لـ WebKit browsers */
+@media screen and (-webkit-min-device-pixel-ratio:0) {
+  input, textarea, select {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+  }
+}
+
+/* إصلاح لـ Edge/IE */
+@supports (-ms-ime-align: auto) {
+  input, textarea, select {
+    color: #000000 !important;
+  }
+}
+
+/* قاعدة نهائية شاملة */
+html input,
+html textarea,
+html select,
+body input,
+body textarea,
+body select {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}

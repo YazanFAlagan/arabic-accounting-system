@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import QuickNavigation from '@/components/QuickNavigation'
 import { TrendingUp, TrendingDown, DollarSign, BarChart3 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 
@@ -9,6 +10,7 @@ interface ProfitLossData {
   totalRevenue: number
   totalExpenses: number
   netProfit: number
+  availableFunds: number // الأموال المتاحة الحالية
   monthlyData: Array<{
     month: string
     revenue: number
@@ -26,6 +28,7 @@ export default function ProfitLossPage() {
     totalRevenue: 0,
     totalExpenses: 0,
     netProfit: 0,
+    availableFunds: 0,
     monthlyData: [],
     categoryExpenses: []
   })
@@ -77,13 +80,48 @@ export default function ProfitLossPage() {
         .gte('purchase_date', startDateStr)
         .lte('purchase_date', endDateStr)
 
+      // Fetch products data for cost calculation
+      const { data: productsData } = await supabase
+        .from('products')
+        .select('*')
+
       // Calculate totals
       const totalRevenue = salesData?.reduce((sum, sale) => sum + sale.total_price, 0) || 0
       const totalExpenses = purchasesData?.reduce((sum, purchase) => sum + purchase.total_cost, 0) || 0
-      const netProfit = totalRevenue - totalExpenses
+      
+      // Calculate actual net profit: (sale price - product cost) for each sale
+      let actualNetProfit = 0
+      if (salesData && productsData && salesData.length > 0) {
+        actualNetProfit = salesData.reduce((totalProfit, sale) => {
+          // Find the product for this sale
+          const product = productsData.find(p => p.name === sale.product_name)
+          if (product && product.wholesale_price !== null && product.wholesale_price !== undefined) {
+            // Convert to numbers and validate
+            const unitPrice = parseFloat(sale.unit_price) || 0
+            const costPrice = parseFloat(product.wholesale_price) || 0
+            const quantity = parseInt(sale.quantity) || 0
+            
+            // Calculate profit for this sale: (sale price - product cost) × quantity
+            const saleProfit = (unitPrice - costPrice) * quantity
+            
+            // Add to total profit if valid
+            if (!isNaN(saleProfit) && isFinite(saleProfit)) {
+              return totalProfit + saleProfit
+            }
+          }
+          return totalProfit
+        }, 0)
+      }
+      
+      // Ensure netProfit is a valid number
+      const netProfit = isNaN(actualNetProfit) || !isFinite(actualNetProfit) ? 0 : actualNetProfit
+
+      // حساب الأموال المتاحة الحالية
+      // الأموال المتاحة = إجمالي الإيرادات - إجمالي المصروفات
+      const availableFunds = totalRevenue - totalExpenses
 
       // Generate monthly data
-      const monthlyData = generateMonthlyData(salesData || [], purchasesData || [], startDate, endDate)
+      const monthlyData = generateMonthlyData(salesData || [], purchasesData || [], productsData || [], startDate, endDate)
 
       // Generate category expenses
       const categoryExpenses = generateCategoryExpenses(purchasesData || [])
@@ -92,6 +130,7 @@ export default function ProfitLossPage() {
         totalRevenue,
         totalExpenses,
         netProfit,
+        availableFunds,
         monthlyData,
         categoryExpenses
       })
@@ -102,7 +141,7 @@ export default function ProfitLossPage() {
     }
   }
 
-  const generateMonthlyData = (sales: any[], purchases: any[], startDate: Date, endDate: Date) => {
+  const generateMonthlyData = (sales: any[], purchases: any[], products: any[], startDate: Date, endDate: Date) => {
     const monthlyData: any[] = []
     const current = new Date(startDate)
 
@@ -115,7 +154,29 @@ export default function ProfitLossPage() {
 
       const revenue = monthSales.reduce((sum, sale) => sum + sale.total_price, 0)
       const expenses = monthPurchases.reduce((sum, purchase) => sum + purchase.total_cost, 0)
-      const profit = revenue - expenses
+      
+      // Calculate actual profit for this month: (sale price - product cost) for each sale
+      const actualProfit = monthSales.reduce((totalProfit, sale) => {
+        const product = products.find((p: any) => p.name === sale.product_name)
+        if (product && product.wholesale_price !== null && product.wholesale_price !== undefined) {
+          // Convert to numbers and validate
+          const unitPrice = parseFloat(sale.unit_price) || 0
+          const costPrice = parseFloat(product.wholesale_price) || 0
+          const quantity = parseInt(sale.quantity) || 0
+          
+          // Calculate profit for this sale: (sale price - product cost) × quantity
+          const saleProfit = (unitPrice - costPrice) * quantity
+          
+          // Add to total profit if valid
+          if (!isNaN(saleProfit) && isFinite(saleProfit)) {
+            return totalProfit + saleProfit
+          }
+        }
+        return totalProfit
+      }, 0)
+      
+      // Ensure profit is a valid number
+      const profit = isNaN(actualProfit) || !isFinite(actualProfit) ? 0 : actualProfit
 
       monthlyData.push({
         month: monthName,
@@ -166,7 +227,10 @@ export default function ProfitLossPage() {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
+      <QuickNavigation />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -186,7 +250,21 @@ export default function ProfitLossPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">الأموال المتاحة</p>
+              <p className={`text-2xl font-bold ${data.availableFunds >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                {formatCurrency(data.availableFunds)}
+              </p>
+            </div>
+            <div className={`p-3 rounded-full ${data.availableFunds >= 0 ? 'bg-blue-100' : 'bg-red-100'}`}>
+              <DollarSign className={`h-6 w-6 ${data.availableFunds >= 0 ? 'text-blue-600' : 'text-red-600'}`} />
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -220,7 +298,7 @@ export default function ProfitLossPage() {
               </p>
             </div>
             <div className={`p-3 rounded-full ${data.netProfit >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-              <DollarSign className={`h-6 w-6 ${data.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+              <BarChart3 className={`h-6 w-6 ${data.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`} />
             </div>
           </div>
         </div>
@@ -362,12 +440,14 @@ export default function ProfitLossPage() {
                     {formatCurrency(month.profit)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {month.revenue > 0 ? ((month.profit / month.revenue) * 100).toFixed(1) : 0}%
+                    {month.revenue > 0 ? ((month.profit / month.revenue) * 100).toFixed(2) : 0}%
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
         </div>
       </div>
     </div>

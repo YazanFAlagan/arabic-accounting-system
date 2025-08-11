@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import QuickNavigation from '@/components/QuickNavigation'
 import { Plus, Search, Edit, Trash2, Package, AlertTriangle } from 'lucide-react'
 
 interface Product {
@@ -122,7 +123,7 @@ export default function InventoryPage() {
   }
 
   const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase())
+    product.name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const lowStockProducts = products.filter(product => 
@@ -152,7 +153,10 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
+      <QuickNavigation />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -407,6 +411,8 @@ export default function InventoryPage() {
             <p className="mt-1 text-sm text-gray-500">ابدأ بإضافة منتج جديد</p>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   )

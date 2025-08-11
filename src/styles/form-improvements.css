@@ -1,0 +1,233 @@
+/* تحسينات النماذج والمدخلات */
+
+/* إصلاح لون النص في جميع المدخلات - قواعد قوية جداً */
+input,
+input[type="text"],
+input[type="email"], 
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="search"],
+textarea,
+select {
+  color: #000000 !important; /* أسود قوي جداً */
+  -webkit-text-fill-color: #000000 !important; /* للمتصفحات الحديثة */
+}
+
+/* إصلاح placeholder ليكون رمادي فاتح */
+input::placeholder,
+textarea::placeholder {
+  color: #6b7280 !important; /* رمادي متوسط للـ placeholder */
+  opacity: 1 !important;
+  -webkit-text-fill-color: #6b7280 !important;
+}
+
+/* تحسين التركيز على المدخلات */
+input:focus,
+textarea:focus,
+select:focus {
+  color: #000000 !important; /* أسود قوي عند التركيز */
+  -webkit-text-fill-color: #000000 !important;
+  border-color: #3b82f6 !important; /* أزرق للحدود */
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* تحسين المدخلات المعطلة */
+input:disabled,
+textarea:disabled,
+select:disabled {
+  color: #374151 !important; /* رمادي داكن للمعطل */
+  -webkit-text-fill-color: #374151 !important;
+  background-color: #f9fafb !important;
+}
+
+/* تحسين select options */
+select option {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+  background-color: white !important;
+}
+
+/* إصلاح خاص لـ Tailwind CSS classes */
+.text-gray-400,
+.text-gray-500,
+.text-gray-600 {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* إصلاح للمدخلات داخل النماذج */
+form input,
+form textarea,
+form select,
+.form-input,
+.form-select,
+.form-textarea {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* تحسين التصميم للموبايل */
+@media (max-width: 640px) {
+  /* تحسين حجم النصوص على الموبايل */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important; /* منع التكبير التلقائي على iOS */
+    min-height: 44px !important; /* حد أدنى لسهولة اللمس */
+  }
+  
+  /* تحسين المسافات على الموبايل */
+  .grid {
+    gap: 1rem !important;
+  }
+  
+  /* تحسين البطاقات على الموبايل */
+  .bg-white {
+    margin-bottom: 1rem;
+    border-radius: 0.75rem !important;
+  }
+  
+  /* تحسين الأزرار على الموبايل */
+  button {
+    min-height: 44px !important;
+    padding: 0.75rem 1rem !important;
+  }
+}
+
+/* تحسين الجداول للموبايل */
+@media (max-width: 768px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  table {
+    font-size: 0.875rem;
+  }
+  
+  th, td {
+    padding: 0.5rem !important;
+    white-space: nowrap;
+  }
+}
+
+/* تحسين النوافذ المنبثقة للموبايل */
+@media (max-width: 640px) {
+  .fixed.inset-0 .bg-white {
+    margin: 1rem !important;
+    max-height: calc(100vh - 2rem) !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* تحسين التنقل السريع للموبايل */
+@media (max-width: 768px) {
+  .max-w-7xl {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}
+
+/* تحسين البطاقات الإحصائية */
+.stat-card {
+  transition: transform 0.2s ease-in-out;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+/* تحسين الألوان للوضع الداكن (إذا أردت إضافته لاحقاً) */
+@media (prefers-color-scheme: dark) {
+  input,
+  textarea,
+  select {
+    color: #f9fafb !important;
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+  }
+  
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af !important;
+  }
+}
+
+/* إصلاحات شاملة وقوية لجميع النصوص في المدخلات */
+
+/* إصلاح كل المدخلات بغض النظر عن الـ classes */
+input,
+textarea,
+select,
+[type="text"],
+[type="email"],
+[type="password"],
+[type="number"],
+[type="date"],
+[type="datetime-local"],
+[type="search"],
+[type="tel"],
+[type="url"] {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* إصلاح خاص لجميع عناصر النماذج */
+.w-full.px-4,
+.w-full.px-3,
+.border.border-gray-200,
+.rounded-xl,
+.rounded-lg,
+.bg-gray-50,
+.bg-white {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* إصلاح شامل لكل الـ Tailwind gray classes في المدخلات */
+input.text-gray-400,
+input.text-gray-500,
+input.text-gray-600,
+input.text-gray-700,
+textarea.text-gray-400,
+textarea.text-gray-500,
+textarea.text-gray-600,
+textarea.text-gray-700,
+select.text-gray-400,
+select.text-gray-500,
+select.text-gray-600,
+select.text-gray-700 {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* إصلاح لكل المدخلات داخل divs */
+div input,
+div textarea,
+div select,
+form input,
+form textarea,
+form select {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* إصلاح خاص للمدخلات مع background معين */
+input[class*="bg-gray-50"],
+textarea[class*="bg-gray-50"],
+select[class*="bg-gray-50"],
+input[class*="hover:bg-white"],
+textarea[class*="hover:bg-white"],
+select[class*="hover:bg-white"] {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}
+
+/* استثناءات للعناوين والتسميات - نحافظ على ألوانها الأصلية */
+label,
+h1, h2, h3, h4, h5, h6,
+p:not(input p):not(textarea p):not(select p),
+span:not(input span):not(textarea span):not(select span) {
+  color: inherit; /* الحفاظ على الألوان الأصلية للعناوين */
+}

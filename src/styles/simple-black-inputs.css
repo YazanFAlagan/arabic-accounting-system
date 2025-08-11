@@ -1,0 +1,91 @@
+/* حل بسيط وفعال - المدخلات سوداء والعناوين تحافظ على ألوانها */
+
+/* قواعد بسيطة ومحددة للمدخلات فقط */
+input {
+  color: #000000 !important;
+}
+
+textarea {
+  color: #000000 !important;
+}
+
+select {
+  color: #000000 !important;
+}
+
+/* إصلاح للـ placeholder */
+input::placeholder,
+textarea::placeholder {
+  color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+/* إصلاح للـ focus */
+input:focus,
+textarea:focus,
+select:focus {
+  color: #000000 !important;
+}
+
+/* إصلاح للـ options */
+select option {
+  color: #000000 !important;
+  background-color: white !important;
+}
+
+/* إصلاح للمدخلات المعطلة */
+input:disabled,
+textarea:disabled,
+select:disabled {
+  color: #374151 !important;
+}
+
+/* العناوين والنصوص تحافظ على ألوانها الأصلية */
+h1, h2, h3, h4, h5, h6 {
+  color: inherit !important;
+}
+
+p, span, div, label {
+  color: inherit !important;
+}
+
+/* الألوان المحددة تبقى كما هي */
+.text-red-600 {
+  color: #dc2626 !important;
+}
+
+.text-blue-600 {
+  color: #2563eb !important;
+}
+
+.text-green-600 {
+  color: #16a34a !important;
+}
+
+.text-gray-900 {
+  color: #111827 !important;
+}
+
+.text-gray-800 {
+  color: #1f2937 !important;
+}
+
+.text-gray-700 {
+  color: #374151 !important;
+}
+
+.text-gray-600 {
+  color: #4b5563 !important;
+}
+
+.text-purple-600 {
+  color: #9333ea !important;
+}
+
+.text-indigo-600 {
+  color: #4f46e5 !important;
+}
+
+.text-yellow-600 {
+  color: #ca8a04 !important;
+}

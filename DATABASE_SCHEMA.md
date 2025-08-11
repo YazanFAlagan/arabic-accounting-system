@@ -45,7 +45,9 @@ CREATE TABLE purchases (
     total_cost DECIMAL(10,2) NOT NULL,
     supplier_name TEXT NOT NULL,
     purchase_date DATE NOT NULL,
-    type TEXT CHECK (type IN ('product', 'expense')) NOT NULL DEFAULT 'product',
+    unit TEXT DEFAULT 'قطعة',  -- وحدة القياس
+    min_stock_alert INTEGER DEFAULT 10,  -- الحد الأدنى للتنبيه
+    type TEXT CHECK (type IN ('product', 'expense', 'raw_material')) NOT NULL DEFAULT 'product',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE
 );

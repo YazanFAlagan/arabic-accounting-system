@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import QuickNavigation from '@/components/QuickNavigation'
 import { BarChart3, TrendingUp, Package, DollarSign } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
@@ -161,7 +162,10 @@ export default function BestSellersPage() {
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
+      <QuickNavigation />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -416,6 +420,8 @@ export default function BestSellersPage() {
             <p className="mt-1 text-sm text-gray-500">ابدأ بإضافة مبيعات لرؤية التحليلات</p>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </div>
   )
