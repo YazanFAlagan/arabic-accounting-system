@@ -346,10 +346,22 @@ export default function ReportsPage() {
   }, [startDate, endDate])
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('ar-EG', {
-      style: 'currency',
-      currency: 'EGP'
-    }).format(amount)
+    if (typeof amount !== 'number' || isNaN(amount)) {
+      return '0 ج.م.'
+    }
+    
+    // إذا كان الرقم صحيح (بدون كسور)
+    if (Number.isInteger(amount)) {
+      return `${amount} ج.م.`
+    }
+    
+    // إذا كان الرقم عشري، نعرض رقمين فقط بعد الفاصلة
+    const formattedAmount = Number(amount).toFixed(2)
+    
+    // إزالة الأصفار الزائدة في النهاية
+    const cleanAmount = formattedAmount.replace(/\.?0+$/, '')
+    
+    return `${cleanAmount} ج.م.`
   }
 
   const formatDate = (dateString: string) => {

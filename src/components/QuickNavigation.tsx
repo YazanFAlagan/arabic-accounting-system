@@ -10,7 +10,8 @@ import {
   Star, 
   FileText,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CreditCard
 } from 'lucide-react'
 
 const quickNavItems = [
@@ -21,6 +22,7 @@ const quickNavItems = [
   { name: 'المواد الخام', href: '/raw-materials', icon: Package },
   { name: 'الأرباح والخسائر', href: '/profit-loss', icon: TrendingUp },
   { name: 'الأكثر مبيعاً', href: '/best-sellers', icon: Star },
+  { name: 'إدارة الديون', href: '/debts', icon: CreditCard },
   { name: 'التقارير', href: '/reports', icon: FileText },
 ]
 

@@ -13,8 +13,10 @@ import {
   ShoppingCart,
   Users,
   BarChart3,
-  LogOut
+  LogOut,
+  CreditCard
 } from 'lucide-react'
+import Link from 'next/link'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import QuickNavigation from '@/components/QuickNavigation'
 
@@ -102,14 +104,21 @@ export default function Dashboard() {
 
   const formatCurrency = (amount: number) => {
     if (typeof amount !== 'number' || isNaN(amount)) {
-      return '0.00 ج.م'
+      return '0 ج.م.'
     }
-    return new Intl.NumberFormat('ar-EG', {
-      style: 'currency',
-      currency: 'EGP',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount)
+    
+    // إذا كان الرقم صحيح (بدون كسور)
+    if (Number.isInteger(amount)) {
+      return `${amount} ج.م.`
+    }
+    
+    // إذا كان الرقم عشري، نعرض رقمين فقط بعد الفاصلة
+    const formattedAmount = Number(amount).toFixed(2)
+    
+    // إزالة الأصفار الزائدة في النهاية
+    const cleanAmount = formattedAmount.replace(/\.?0+$/, '')
+    
+    return `${cleanAmount} ج.م.`
   }
 
   const [loading, setLoading] = useState(true)
@@ -391,6 +400,51 @@ export default function Dashboard() {
               icon={<AlertTriangle className="h-8 w-8" />}
               color="yellow"
             />
+          </div>
+
+          {/* Quick Actions Section */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/20 p-12">
+            <h3 className="text-3xl font-bold text-gray-800 mb-12 flex items-center justify-center">
+              <BarChart3 className="h-10 w-10 ml-4 text-indigo-600" />
+              الإجراءات السريعة
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <Link
+                href="/sales"
+                className="group p-8 bg-gradient-to-br from-green-50 to-green-100 rounded-3xl border border-green-200 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 text-center"
+              >
+                <ShoppingCart className="h-16 w-16 text-green-600 mx-auto mb-4 group-hover:scale-110 transition-transform duration-300" />
+                <h4 className="text-xl font-bold text-green-800 mb-2">المبيعات</h4>
+                <p className="text-green-700">إدارة المبيعات والفواتير</p>
+              </Link>
+              
+              <Link
+                href="/purchases"
+                className="group p-8 bg-gradient-to-br from-blue-50 to-blue-100 rounded-3xl border border-blue-200 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 text-center"
+              >
+                <DollarSign className="h-16 w-16 text-blue-600 mx-auto mb-4 group-hover:scale-110 transition-transform duration-300" />
+                <h4 className="text-xl font-bold text-blue-800 mb-2">المشتريات</h4>
+                <p className="text-blue-700">إدارة المشتريات والمصروفات</p>
+              </Link>
+              
+              <Link
+                href="/inventory"
+                className="group p-8 bg-gradient-to-br from-purple-50 to-purple-100 rounded-3xl border border-purple-200 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 text-center"
+              >
+                <Package className="h-16 w-16 text-purple-600 mx-auto mb-4 group-hover:scale-110 transition-transform duration-300" />
+                <h4 className="text-xl font-bold text-purple-800 mb-2">المخزون</h4>
+                <p className="text-purple-700">إدارة المنتجات والمخزون</p>
+              </Link>
+              
+              <Link
+                href="/debts"
+                className="group p-8 bg-gradient-to-br from-orange-50 to-orange-100 rounded-3xl border border-orange-200 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 text-center"
+              >
+                <CreditCard className="h-16 w-16 text-orange-600 mx-auto mb-4 group-hover:scale-110 transition-transform duration-300" />
+                <h4 className="text-xl font-bold text-orange-800 mb-2">إدارة الديون</h4>
+                <p className="text-orange-700">تتبع الديون والذمم المدينة</p>
+              </Link>
+            </div>
           </div>
 
           {/* Profit Distribution Section */}

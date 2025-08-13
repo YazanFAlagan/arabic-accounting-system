@@ -14,7 +14,8 @@ import {
   LogOut, 
   Menu, 
   X,
-  FileText
+  FileText,
+  CreditCard
 } from 'lucide-react'
 
 const navigationItems = [
@@ -24,6 +25,7 @@ const navigationItems = [
   { name: 'المخزون', href: '/inventory', icon: Package },
   { name: 'الأرباح والخسائر', href: '/profit-loss', icon: TrendingUp },
   { name: 'الأكثر مبيعاً', href: '/best-sellers', icon: BarChart3 },
+  { name: 'إدارة الديون', href: '/debts', icon: CreditCard },
   { name: 'التقارير', href: '/reports', icon: FileText },
 ]
 
