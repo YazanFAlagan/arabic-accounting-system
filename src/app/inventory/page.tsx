@@ -9,7 +9,9 @@ interface Product {
   id: string
   name: string
   wholesale_price: number
-  selling_price: number
+  retail_price: number
+  shop_price: number
+  selling_price: number // للتوافق مع النظام القديم
   current_stock: number
   min_stock_alert: number
   created_at: string
@@ -26,8 +28,9 @@ export default function InventoryPage() {
   // Form state
   const [formData, setFormData] = useState({
     name: '',
-    wholesale_price: 0,
-    selling_price: 0,
+    wholesale_price: 0, // سعر التكلفة (للحسابات الداخلية فقط)
+    retail_price: 0,
+    shop_price: 0,
     current_stock: 0,
     min_stock_alert: 5
   })
@@ -62,6 +65,7 @@ export default function InventoryPage() {
           .from('products')
           .update({
             ...formData,
+            selling_price: formData.retail_price, // للتوافق مع النظام القديم
             updated_at: new Date().toISOString()
           })
           .eq('id', editingProduct.id)
@@ -71,7 +75,10 @@ export default function InventoryPage() {
         // Create new product
         const { error } = await supabase
           .from('products')
-          .insert([formData])
+          .insert([{
+            ...formData,
+            selling_price: formData.retail_price // للتوافق مع النظام القديم
+          }])
 
         if (error) throw error
       }
@@ -80,7 +87,8 @@ export default function InventoryPage() {
       setFormData({
         name: '',
         wholesale_price: 0,
-        selling_price: 0,
+        retail_price: 0,
+        shop_price: 0,
         current_stock: 0,
         min_stock_alert: 5
       })
@@ -98,7 +106,8 @@ export default function InventoryPage() {
     setFormData({
       name: product.name,
       wholesale_price: product.wholesale_price,
-      selling_price: product.selling_price,
+      retail_price: product.retail_price || product.selling_price,
+      shop_price: product.shop_price || product.selling_price,
       current_stock: product.current_stock,
       min_stock_alert: product.min_stock_alert
     })
@@ -170,7 +179,8 @@ export default function InventoryPage() {
             setFormData({
               name: '',
               wholesale_price: 0,
-              selling_price: 0,
+              retail_price: 0,
+              shop_price: 0,
               current_stock: 0,
               min_stock_alert: 5
             })
@@ -231,10 +241,11 @@ export default function InventoryPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* أسعار المنتج */}
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    سعر الجملة (جنيه)
+                    سعر التكلفة (جنيه)
                   </label>
                   <input
                     type="number"
@@ -246,19 +257,36 @@ export default function InventoryPage() {
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    سعر البيع (جنيه)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.selling_price}
-                    onChange={(e) => setFormData(prev => ({ ...prev, selling_price: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    required
-                  />
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      سعر القطاعي (جنيه)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.retail_price}
+                      onChange={(e) => setFormData(prev => ({ ...prev, retail_price: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      سعر المحلات (جنيه)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.shop_price}
+                      onChange={(e) => setFormData(prev => ({ ...prev, shop_price: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -291,12 +319,22 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-sm text-gray-600">
-                  هامش الربح: <span className="font-semibold text-gray-900">
-                    {calculateProfitMargin(formData.wholesale_price, formData.selling_price)}%
-                  </span>
-                </p>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                <h4 className="text-sm font-medium text-gray-700">هوامش الربح:</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">القطاعي: </span>
+                    <span className="font-semibold text-green-600">
+                      {calculateProfitMargin(formData.wholesale_price, formData.retail_price)}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">المحلات: </span>
+                    <span className="font-semibold text-blue-600">
+                      {calculateProfitMargin(formData.wholesale_price, formData.shop_price)}%
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -336,10 +374,10 @@ export default function InventoryPage() {
                     سعر الجملة
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    سعر البيع
+                    سعر القطاعي
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    هامش الربح
+                    سعر المحلات
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     المخزون
@@ -362,11 +400,15 @@ export default function InventoryPage() {
                       <div className="text-sm text-gray-900">{formatCurrency(product.wholesale_price)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{formatCurrency(product.selling_price)}</div>
+                      <div className="text-sm text-gray-900">{formatCurrency(product.retail_price || product.selling_price)}</div>
+                      <div className="text-xs text-green-600">
+                        +{calculateProfitMargin(product.wholesale_price, product.retail_price || product.selling_price)}%
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {calculateProfitMargin(product.wholesale_price, product.selling_price)}%
+                      <div className="text-sm text-gray-900">{formatCurrency(product.shop_price || product.selling_price)}</div>
+                      <div className="text-xs text-blue-600">
+                        +{calculateProfitMargin(product.wholesale_price, product.shop_price || product.selling_price)}%
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

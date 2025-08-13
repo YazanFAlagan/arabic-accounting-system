@@ -13,7 +13,8 @@ import {
   ShoppingCart,
   Package,
   TrendingUp,
-  Filter
+  Filter,
+  Printer
 } from 'lucide-react'
 
 interface ReportData {
@@ -41,6 +42,11 @@ export default function ReportsPage() {
   const [reportType, setReportType] = useState<'sales' | 'expenses' | 'all'>('all')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [showInvoiceDetails, setShowInvoiceDetails] = useState(false)
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null)
+  const [invoiceDetails, setInvoiceDetails] = useState<any[]>([])
+  const [showExpenseDetails, setShowExpenseDetails] = useState(false)
+  const [selectedExpense, setSelectedExpense] = useState<any>(null)
 
   useEffect(() => {
     // Set default dates (last 30 days)
@@ -51,74 +57,281 @@ export default function ReportsPage() {
     setStartDate(thirtyDaysAgo.toISOString().split('T')[0])
   }, [])
 
-  const fetchReportData = async () => {
-    if (!startDate || !endDate) return
-
-    setLoading(true)
+  const fetchInvoiceDetails = async (invoiceId: string) => {
     try {
-      // Fetch sales data
-      const { data: salesData } = await supabase
-        .from('sales')
+      const { data, error } = await supabase
+        .from('invoice_items')
         .select('*')
-        .gte('sale_date', startDate)
-        .lte('sale_date', endDate)
-        .order('sale_date', { ascending: false })
+        .eq('invoice_id', invoiceId)
 
-      // Fetch purchases/expenses data
+      if (error) throw error
+      setInvoiceDetails(data || [])
+    } catch (error) {
+      console.error('Error fetching invoice details:', error)
+    }
+  }
+
+  const handleViewInvoiceDetails = async (invoice: any) => {
+    setSelectedInvoice(invoice)
+    await fetchInvoiceDetails(invoice.id)
+    setShowInvoiceDetails(true)
+  }
+
+  const handleViewExpenseDetails = (expense: any) => {
+    setSelectedExpense(expense)
+    setShowExpenseDetails(true)
+  }
+
+  const printInvoice = async (invoice: any) => {
+    try {
+      // Fetch invoice details for printing
+      const { data: itemsData } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .eq('invoice_id', invoice.id)
+
+      if (!itemsData) return
+
+      // Create print window content
+      const printContent = `
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>فاتورة ${invoice.invoice_number}</title>
+          <style>
+            @media print {
+              body { margin: 0; padding: 20px; }
+              .no-print { display: none; }
+            }
+            body { 
+              font-family: 'Arial', sans-serif; 
+              margin: 20px; 
+              direction: rtl; 
+              text-align: right;
+            }
+            .header { 
+              text-align: center; 
+              border-bottom: 2px solid #333; 
+              padding-bottom: 20px; 
+              margin-bottom: 30px;
+            }
+            .invoice-info { 
+              display: flex; 
+              justify-content: space-between; 
+              margin-bottom: 30px;
+            }
+            .customer-info { 
+              border: 1px solid #ddd; 
+              padding: 15px; 
+              border-radius: 8px;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin: 20px 0;
+            }
+            th, td { 
+              border: 1px solid #ddd; 
+              padding: 12px; 
+              text-align: right;
+            }
+            th { 
+              background-color: #f8f9fa; 
+              font-weight: bold;
+            }
+            .totals { 
+              margin-top: 30px; 
+              text-align: left;
+            }
+            .total-row { 
+              font-weight: bold; 
+              font-size: 18px;
+            }
+            .print-btn { 
+              background: #007bff; 
+              color: white; 
+              border: none; 
+              padding: 10px 20px; 
+              border-radius: 5px; 
+              cursor: pointer; 
+              margin: 20px 0;
+            }
+            @media print {
+              .print-btn { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>فاتورة مبيعات</h1>
+            <h2>رقم الفاتورة: ${invoice.invoice_number}</h2>
+          </div>
+          
+          <div class="invoice-info">
+            <div class="customer-info">
+              <h3>بيانات العميل:</h3>
+              <p><strong>الاسم:</strong> ${invoice.customer_name}</p>
+              <p><strong>التاريخ:</strong> ${formatDate(invoice.invoice_date)}</p>
+              <p><strong>نوع البيع:</strong> ${invoice.sale_type === 'retail' ? 'قطاعي' : 'محلات'}</p>
+            </div>
+            <div>
+              <p><strong>تاريخ الإنشاء:</strong> ${formatDate(invoice.created_at)}</p>
+            </div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>المنتج</th>
+                <th>الكمية</th>
+                <th>السعر الأصلي</th>
+                <th>الخصم</th>
+                <th>السعر النهائي</th>
+                <th>المجموع</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsData.map(item => `
+                <tr>
+                  <td>${item.product_name}</td>
+                  <td>${item.quantity}</td>
+                  <td>${item.unit_price.toFixed(2)} ج.م</td>
+                  <td>
+                    ${item.item_discount_percentage > 0 ? item.item_discount_percentage + '%' : ''}
+                    ${item.item_discount_percentage > 0 && item.item_discount_amount > 0 ? ' + ' : ''}
+                    ${item.item_discount_amount > 0 ? item.item_discount_amount.toFixed(2) + ' ج.م' : ''}
+                  </td>
+                  <td>${item.final_unit_price.toFixed(2)} ج.م</td>
+                  <td>${item.line_total.toFixed(2)} ج.م</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="totals">
+            <div class="total-row">
+              <strong>المجموع الفرعي:</strong> ${invoice.subtotal?.toFixed(2) || '0.00'} ج.م
+            </div>
+            ${(invoice.discount_percentage > 0 || invoice.discount_amount > 0) ? `
+              <div class="total-row" style="color: red;">
+                <strong>خصم إضافي:</strong> -${((invoice.subtotal || 0) * invoice.discount_percentage / 100 + (invoice.discount_amount || 0)).toFixed(2)} ج.م
+              </div>
+            ` : ''}
+            <div class="total-row" style="color: green; font-size: 20px;">
+              <strong>المجموع النهائي:</strong> ${invoice.total_amount.toFixed(2)} ج.م
+            </div>
+          </div>
+          
+          ${invoice.notes ? `
+            <div style="margin-top: 30px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+              <h4>ملاحظات:</h4>
+              <p>${invoice.notes}</p>
+            </div>
+          ` : ''}
+          
+          <button class="print-btn no-print" onclick="window.print()">طباعة الفاتورة</button>
+        </body>
+        </html>
+      `
+
+      // Open print window
+      const printWindow = window.open('', '_blank')
+      if (printWindow) {
+        printWindow.document.write(printContent)
+        printWindow.document.close()
+        printWindow.focus()
+      }
+    } catch (error) {
+      console.error('Error printing invoice:', error)
+      alert('حدث خطأ في طباعة الفاتورة')
+    }
+  }
+
+  const fetchReportData = async () => {
+    try {
+      setLoading(true)
+
+      // Fetch invoices data
+      const { data: invoicesData } = await supabase
+        .from('invoices')
+        .select('*')
+        .gte('invoice_date', startDate)
+        .lte('invoice_date', endDate)
+
+      // Fetch purchases data
       const { data: purchasesData } = await supabase
         .from('purchases')
         .select('*')
         .gte('purchase_date', startDate)
         .lte('purchase_date', endDate)
-        .order('purchase_date', { ascending: false })
 
       // Fetch products data
       const { data: productsData } = await supabase
         .from('products')
         .select('*')
 
-      const totalSales = salesData?.reduce((sum, sale) => sum + sale.total_price, 0) || 0
-      const totalExpenses = purchasesData?.reduce((sum, purchase) => sum + purchase.total_cost, 0) || 0
-      
-      // Calculate actual net profit: (sale price - product cost) for each sale
-      let actualNetProfit = 0
-      if (salesData && productsData && salesData.length > 0) {
-        actualNetProfit = salesData.reduce((totalProfit, sale) => {
-          // Find the product for this sale
-          const product = productsData.find((p: any) => p.name === sale.product_name)
-          if (product && product.wholesale_price !== null && product.wholesale_price !== undefined) {
-            // Convert to numbers and validate
-            const unitPrice = parseFloat(sale.unit_price) || 0
-            const costPrice = parseFloat(product.wholesale_price) || 0
-            const quantity = parseInt(sale.quantity) || 0
-            
-            // Calculate profit for this sale: (sale price - product cost) × quantity
-            const saleProfit = (unitPrice - costPrice) * quantity
-            
-            // Add to total profit if valid
-            if (!isNaN(saleProfit) && isFinite(saleProfit)) {
-              return totalProfit + saleProfit
-            }
-          }
-          return totalProfit
-        }, 0)
-      }
-      
-      // Ensure netProfit is a valid number
-      const netProfit = isNaN(actualNetProfit) || !isFinite(actualNetProfit) ? 0 : actualNetProfit
-      
-      // Calculate available funds (total sales minus total expenses)
-      const availableFunds = totalSales - totalExpenses
+      if (invoicesData && purchasesData && productsData) {
+        // Calculate total sales from invoices only
+        const totalSales = invoicesData.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0)
 
-      setReportData({
-        sales: salesData || [],
-        purchases: purchasesData || [],
-        products: productsData || [],
-        totalSales,
-        totalExpenses,
-        netProfit,
-        availableFunds
-      })
+        // Calculate total expenses from purchases
+        const totalExpenses = purchasesData.reduce((sum, purchase) => sum + (purchase.total_cost || 0), 0)
+
+        // Calculate net profit
+        const netProfit = totalSales - totalExpenses
+
+        // Calculate actual net profit (considering product costs)
+        let actualNetProfit = netProfit
+
+        // Subtract product costs from sales
+        if (invoicesData && productsData && invoicesData.length > 0) {
+          // Get invoice items for cost calculation
+          const { data: invoiceItemsData } = await supabase
+            .from('invoice_items')
+            .select('*')
+
+          if (invoiceItemsData) {
+            actualNetProfit = invoicesData.reduce((totalProfit, invoice) => {
+              const items = invoiceItemsData.filter(item => item.invoice_id === invoice.id)
+              return totalProfit + items.reduce((itemProfit, item) => {
+                const product = productsData.find(p => p.id === item.product_id)
+                if (product && product.wholesale_price) {
+                  const costPrice = product.wholesale_price
+                  const unitPrice = item.unit_price
+                  const quantity = parseInt(item.quantity) || 0
+                  const itemProfit = (unitPrice - costPrice) * quantity
+                  if (!isNaN(itemProfit) && isFinite(itemProfit)) {
+                    return totalProfit + itemProfit
+                  }
+                }
+                return totalProfit
+              }, 0)
+            }, 0)
+          }
+        }
+
+        const netProfitFinal = isNaN(actualNetProfit) ? 0 : actualNetProfit
+
+        // Calculate available funds
+        const availableFunds = totalSales - totalExpenses
+
+        // Convert invoices to sales format for display
+        const combinedSalesData = [
+          ...(invoicesData || []).map(invoice => ({ ...invoice, source: 'invoice' }))
+        ]
+
+        setReportData({
+          sales: combinedSalesData,
+          purchases: purchasesData || [],
+          products: productsData || [],
+          totalSales,
+          totalExpenses,
+          netProfit: netProfitFinal,
+          availableFunds
+        })
+      }
     } catch (error) {
       console.error('Error fetching report data:', error)
     } finally {
@@ -178,17 +391,17 @@ export default function ReportsPage() {
     
     // ورقة المبيعات (إذا كان التقرير يتضمن المبيعات)
     if ((reportType === 'sales' || reportType === 'all') && reportData.sales.length > 0) {
-      const salesHeaders = ['الرقم', 'التاريخ', 'اسم المنتج', 'اسم العميل', 'الكمية', 'سعر الوحدة', 'إجمالي السعر', 'ملاحظات']
+      const salesHeaders = ['الرقم', 'التاريخ', 'رقم الفاتورة', 'اسم العميل', 'المجموع الفرعي', 'الخصم', 'المجموع النهائي', 'ملاحظات']
       const salesData = [
         salesHeaders,
         ...reportData.sales.map((sale, index) => [
           index + 1,
-          formatDate(sale.created_at),
-          sale.product_name || 'غير محدد',
+          formatDate(sale.invoice_date),
+          sale.invoice_number || 'غير محدد',
           sale.customer_name || 'غير محدد',
-          sale.quantity || 0,
-          formatCurrency(sale.unit_price || 0),
-          formatCurrency(sale.total_price || 0),
+          formatCurrency(sale.subtotal || 0),
+          formatCurrency(((sale.subtotal || 0) * (sale.discount_percentage || 0) / 100) + (sale.discount_amount || 0)),
+          formatCurrency(sale.total_amount || 0),
           sale.notes || ''
         ])
       ]
@@ -199,11 +412,11 @@ export default function ReportsPage() {
       salesSheet['!cols'] = [
         { width: 8 },   // الرقم
         { width: 12 },  // التاريخ
-        { width: 20 },  // اسم المنتج
+        { width: 15 },  // رقم الفاتورة
         { width: 20 },  // اسم العميل
-        { width: 10 },  // الكمية
-        { width: 15 },  // سعر الوحدة
-        { width: 15 },  // إجمالي السعر
+        { width: 15 },  // المجموع الفرعي
+        { width: 15 },  // الخصم
+        { width: 15 },  // المجموع النهائي
         { width: 25 }   // ملاحظات
       ]
       
@@ -273,14 +486,152 @@ export default function ReportsPage() {
               <h1 className="text-4xl font-bold text-gray-800 mb-2">التقارير</h1>
               <p className="text-gray-600 text-lg">إنشاء وتصدير التقارير المالية</p>
             </div>
-            <button
-              onClick={generateExcel}
-              disabled={loading || getFilteredData().length === 0}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-xl hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 shadow-lg"
-            >
-              <Download className="h-5 w-5 ml-2" />
-              تصدير Excel
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={generateExcel}
+                disabled={loading || getFilteredData().length === 0}
+                className="flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-xl hover:from-green-700 hover:to-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 shadow-lg"
+              >
+                <Download className="h-5 w-5 ml-2" />
+                تصدير Excel
+              </button>
+              <button
+                onClick={() => {
+                  const printContent = `
+                    <!DOCTYPE html>
+                    <html dir="rtl" lang="ar">
+                    <head>
+                      <meta charset="UTF-8">
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                      <title>تقرير ${reportType === 'all' ? 'شامل' : reportType === 'sales' ? 'المبيعات' : 'المصروفات'}</title>
+                      <style>
+                        @media print {
+                          body { margin: 0; padding: 20px; }
+                          .no-print { display: none; }
+                        }
+                        body { 
+                          font-family: 'Arial', sans-serif; 
+                          margin: 20px; 
+                          direction: rtl; 
+                          text-align: right;
+                        }
+                        .header { 
+                          text-align: center; 
+                          border-bottom: 2px solid #333; 
+                          padding-bottom: 20px; 
+                          margin-bottom: 30px;
+                        }
+                        .summary { 
+                          display: grid; 
+                          grid-template-columns: repeat(2, 1fr); 
+                          gap: 20px; 
+                          margin-bottom: 30px;
+                        }
+                        .summary-card { 
+                          border: 1px solid #ddd; 
+                          padding: 15px; 
+                          border-radius: 8px; 
+                          text-align: center;
+                        }
+                        table { 
+                          width: 100%; 
+                          border-collapse: collapse; 
+                          margin: 20px 0;
+                        }
+                        th, td { 
+                          border: 1px solid #ddd; 
+                          padding: 12px; 
+                          text-align: right;
+                        }
+                        th { 
+                          background-color: #f8f9fa; 
+                          font-weight: bold;
+                        }
+                        .print-btn { 
+                          background: #007bff; 
+                          color: white; 
+                          border: none; 
+                          padding: 10px 20px; 
+                          border-radius: 5px; 
+                          cursor: pointer; 
+                          margin: 20px 0;
+                        }
+                        @media print {
+                          .print-btn { display: none; }
+                        }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="header">
+                        <h1>تقرير ${reportType === 'all' ? 'شامل' : reportType === 'sales' ? 'المبيعات' : 'المصروفات'}</h1>
+                        <h2>من ${formatDate(startDate)} إلى ${formatDate(endDate)}</h2>
+                        <p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}</p>
+                      </div>
+                      
+                      <div class="summary">
+                        <div class="summary-card">
+                          <h3>الأموال المتاحة</h3>
+                          <p>${formatCurrency(reportData.availableFunds)}</p>
+                        </div>
+                        <div class="summary-card">
+                          <h3>إجمالي المبيعات</h3>
+                          <p>${formatCurrency(reportData.totalSales)}</p>
+                        </div>
+                        <div class="summary-card">
+                          <h3>إجمالي المصروفات</h3>
+                          <p>${formatCurrency(reportData.totalExpenses)}</p>
+                        </div>
+                        <div class="summary-card">
+                          <h3>صافي الربح</h3>
+                          <p>${formatCurrency(reportData.netProfit)}</p>
+                        </div>
+                      </div>
+                      
+                      <h3>${reportType === 'all' ? 'جميع البيانات' : reportType === 'sales' ? 'بيانات المبيعات' : 'بيانات المصروفات'}</h3>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>التاريخ</th>
+                            <th>النوع</th>
+                            <th>المنتج</th>
+                            <th>العميل/المورد</th>
+                            <th>الكمية</th>
+                            <th>المبلغ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${getFilteredData().map(item => `
+                            <tr>
+                              <td>${formatDate(item.sale_date || item.purchase_date)}</td>
+                              <td>${item.type === 'sale' ? 'مبيعة' : (item.type === 'product' ? 'مشتريات' : 'مصروف')}</td>
+                              <td>${item.product_name}</td>
+                              <td>${item.customer_name || item.supplier_name}</td>
+                              <td>${item.quantity || '-'}</td>
+                              <td>${formatCurrency(item.total_price || item.total_cost)}</td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                      
+                      <button class="print-btn no-print" onclick="window.print()">طباعة التقرير</button>
+                    </body>
+                    </html>
+                  `
+                  
+                  const printWindow = window.open('', '_blank')
+                  if (printWindow) {
+                    printWindow.document.write(printContent)
+                    printWindow.document.close()
+                    printWindow.focus()
+                  }
+                }}
+                disabled={loading || getFilteredData().length === 0}
+                className="flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 shadow-lg"
+              >
+                <Printer className="h-5 w-5 ml-2" />
+                طباعة التقرير
+              </button>
+            </div>
           </div>
 
           {/* Filters */}
@@ -445,30 +796,49 @@ export default function ReportsPage() {
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         المبلغ
                       </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        الإجراءات
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {reportType === 'sales' && reportData.sales.map((sale) => (
                       <tr key={`sale-${sale.id}`} className="hover:bg-gray-50/50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatDate(sale.sale_date)}
+                          {formatDate(sale.invoice_date)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            مبيعة
+                            فاتورة
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {sale.product_name}
+                          فاتورة رقم {sale.invoice_number}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {sale.customer_name}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {sale.quantity}
+                          1
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
-                          {formatCurrency(sale.total_price)}
+                          {formatCurrency(sale.total_amount)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => handleViewInvoiceDetails(sale)}
+                            className="text-indigo-600 hover:text-indigo-900"
+                            title="عرض تفاصيل الفاتورة"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => printInvoice(sale)}
+                            className="text-green-600 hover:text-green-900 mr-2"
+                            title="طباعة الفاتورة"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -495,40 +865,78 @@ export default function ReportsPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-red-600">
                           {formatCurrency(purchase.total_cost)}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => handleViewExpenseDetails(purchase)}
+                            className="text-indigo-600 hover:text-indigo-900"
+                            title="عرض تفاصيل المصروف"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
 
                     {reportType === 'all' && [
-                      ...reportData.sales.map(sale => ({...sale, type: 'sale'})),
+                      ...reportData.sales.map(sale => ({...sale, type: 'invoice'})),
                       ...reportData.purchases.map(purchase => ({...purchase, type: 'purchase'}))
-                    ].sort((a, b) => new Date(b.sale_date || b.purchase_date).getTime() - new Date(a.sale_date || a.purchase_date).getTime())
+                    ].sort((a, b) => new Date(b.invoice_date || b.purchase_date).getTime() - new Date(a.invoice_date || a.purchase_date).getTime())
                     .map((item) => (
                       <tr key={`${item.type}-${item.id}`} className="hover:bg-gray-50/50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatDate(item.sale_date || item.purchase_date)}
+                          {formatDate(item.invoice_date || item.purchase_date)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            item.type === 'sale' 
+                            item.type === 'invoice' 
                               ? 'bg-green-100 text-green-800' 
                               : 'bg-red-100 text-red-800'
                           }`}>
-                            {item.type === 'sale' ? 'مبيعة' : (item.type === 'product' ? 'مشتريات' : 'مصروف')}
+                            {item.type === 'invoice' ? 'فاتورة' : (item.type === 'product' ? 'مشتريات' : 'مصروف')}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {item.product_name}
+                          {item.type === 'invoice' ? `فاتورة رقم ${item.invoice_number}` : (item.product_name || item.expense_description)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {item.customer_name || item.supplier_name}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {item.quantity || '-'}
+                          {item.type === 'invoice' ? '1' : (item.quantity || '-')}
                         </td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${
-                          item.type === 'sale' ? 'text-green-600' : 'text-red-600'
+                          item.type === 'invoice' ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          {formatCurrency(item.total_price || item.total_cost)}
+                          {formatCurrency(item.total_amount || item.total_cost)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          {item.type === 'invoice' && (
+                            <button
+                              onClick={() => handleViewInvoiceDetails(item)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              title="عرض تفاصيل الفاتورة"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </button>
+                          )}
+                          {item.type === 'invoice' && (
+                            <button
+                              onClick={() => printInvoice(item)}
+                              className="text-green-600 hover:text-green-900 mr-2"
+                              title="طباعة الفاتورة"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </button>
+                          )}
+                          {item.type === 'purchase' && (
+                            <button
+                              onClick={() => handleViewExpenseDetails(item)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              title="عرض تفاصيل المصروف"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -545,6 +953,224 @@ export default function ReportsPage() {
           </div>
         </div>
       </div>
+
+      {/* Invoice Details Modal */}
+      {showInvoiceDetails && selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">تفاصيل الفاتورة</h3>
+                <p className="text-sm text-gray-600">
+                  رقم الفاتورة: {selectedInvoice.invoice_number} | 
+                  العميل: {selectedInvoice.customer_name} | 
+                  التاريخ: {formatDate(selectedInvoice.invoice_date)}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => printInvoice(selectedInvoice)}
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  title="طباعة الفاتورة"
+                >
+                  <Printer className="h-4 w-4 ml-2" />
+                  طباعة
+                </button>
+                <button
+                  onClick={() => setShowInvoiceDetails(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {invoiceDetails.length > 0 ? (
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">ملخص الفاتورة</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">المجموع الفرعي:</span>
+                      <p className="font-medium">{formatCurrency(selectedInvoice.subtotal || 0)}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">الخصم:</span>
+                      <p className="font-medium text-red-600">
+                        -{formatCurrency(((selectedInvoice.subtotal || 0) * (selectedInvoice.discount_percentage || 0) / 100) + (selectedInvoice.discount_amount || 0))}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">المجموع النهائي:</span>
+                      <p className="font-medium text-green-600">{formatCurrency(selectedInvoice.total_amount)}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">نوع البيع:</span>
+                      <p className="font-medium">{selectedInvoice.sale_type === 'retail' ? 'قطاعي' : 'محلات'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-700">تفاصيل الأصناف</h4>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">المنتج</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الكمية</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">السعر الأصلي</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الخصم</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">السعر النهائي</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">المجموع</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {invoiceDetails.map((item, index) => (
+                          <tr key={index}>
+                            <td className="px-4 py-3 text-sm text-gray-900">{item.product_name}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{item.quantity}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatCurrency(item.unit_price)}</td>
+                            <td className="px-4 py-3 text-sm text-red-600">
+                              {item.item_discount_percentage > 0 && `${item.item_discount_percentage}%`}
+                              {item.item_discount_percentage > 0 && item.item_discount_amount > 0 && ' + '}
+                              {item.item_discount_amount > 0 && formatCurrency(item.item_discount_amount)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{formatCurrency(item.final_unit_price)}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrency(item.line_total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {selectedInvoice.notes && (
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">ملاحظات</h4>
+                    <p className="text-sm text-blue-800">{selectedInvoice.notes}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500">لا توجد تفاصيل متاحة لهذه الفاتورة</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Expense Details Modal */}
+      {showExpenseDetails && selectedExpense && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">تفاصيل المصروف</h3>
+                <p className="text-sm text-gray-600">
+                  {selectedExpense.type === 'product' ? 'مشتريات' : 'مصروف'} | 
+                  التاريخ: {formatDate(selectedExpense.purchase_date)}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowExpenseDetails(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Expense Summary */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">ملخص المصروف</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">النوع:</span>
+                    <p className="font-medium">
+                      {selectedExpense.type === 'product' ? 'مشتريات منتجات' : 
+                       selectedExpense.type === 'expense' ? 'مصروف عام' : 'مادة خام'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">المورد:</span>
+                    <p className="font-medium">{selectedExpense.supplier_name || 'غير محدد'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">الكمية:</span>
+                    <p className="font-medium">{selectedExpense.quantity || 'غير محدد'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">التكلفة الإجمالية:</span>
+                    <p className="font-medium text-red-600">{formatCurrency(selectedExpense.total_cost)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Product/Expense Details */}
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                  <h4 className="text-sm font-medium text-gray-700">تفاصيل {selectedExpense.type === 'product' ? 'المنتج' : 'المصروف'}</h4>
+                </div>
+                <div className="p-4">
+                  <div className="space-y-3">
+                    <div>
+                      <span className="text-gray-600 text-sm">الاسم:</span>
+                      <p className="font-medium text-gray-900">{selectedExpense.product_name || selectedExpense.expense_description}</p>
+                    </div>
+                    {selectedExpense.unit_cost && (
+                      <div>
+                        <span className="text-gray-600 text-sm">سعر الوحدة:</span>
+                        <p className="font-medium text-gray-900">{formatCurrency(selectedExpense.unit_cost)}</p>
+                      </div>
+                    )}
+                    {selectedExpense.category && (
+                      <div>
+                        <span className="text-gray-600 text-sm">الفئة:</span>
+                        <p className="font-medium text-gray-900">{selectedExpense.category}</p>
+                      </div>
+                    )}
+                    {selectedExpense.payment_method && (
+                      <div>
+                        <span className="text-gray-600 text-sm">طريقة الدفع:</span>
+                        <p className="font-medium text-gray-900">{selectedExpense.payment_method}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {selectedExpense.notes && (
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">ملاحظات</h4>
+                  <p className="text-sm text-blue-800">{selectedExpense.notes}</p>
+                </div>
+              )}
+
+              {/* Additional Info */}
+              <div className="bg-yellow-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-yellow-900 mb-2">معلومات إضافية</h4>
+                <div className="text-sm text-yellow-800 space-y-1">
+                  <p>• تم إنشاء هذا المصروف في: {formatDate(selectedExpense.created_at)}</p>
+                  {selectedExpense.updated_at && selectedExpense.updated_at !== selectedExpense.created_at && (
+                    <p>• تم تحديثه في: {formatDate(selectedExpense.updated_at)}</p>
+                  )}
+                  <p>• نوع المعاملة: {selectedExpense.type === 'product' ? 'مشتريات منتجات' : 
+                                       selectedExpense.type === 'expense' ? 'مصروف عام' : 'مادة خام'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

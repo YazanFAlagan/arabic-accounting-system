@@ -3,137 +3,102 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import QuickNavigation from '@/components/QuickNavigation'
-import { TrendingUp, TrendingDown, DollarSign, BarChart3 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  Calendar,
+  BarChart3,
+  FileText,
+  Printer,
+  Eye,
+  ShoppingCart,
+  Package
+} from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 
 interface ProfitLossData {
-  totalRevenue: number
+  date: string
+  sales: number
+  expenses: number
+  profit: number
+  profitMargin: number
+}
+
+interface MonthlyData {
+  month: string
+  totalSales: number
   totalExpenses: number
   netProfit: number
-  availableFunds: number // الأموال المتاحة الحالية
-  monthlyData: Array<{
-    month: string
-    revenue: number
-    expenses: number
-    profit: number
-  }>
-  categoryExpenses: Array<{
-    category: string
-    amount: number
-  }>
+  profitMargin: number
+  transactions: any[]
+}
+
+interface DailyData {
+  date: string
+  sales: number
+  expenses: number
+  profit: number
+  profitMargin: number
+  transactions: any[]
 }
 
 export default function ProfitLossPage() {
-  const [data, setData] = useState<ProfitLossData>({
-    totalRevenue: 0,
-    totalExpenses: 0,
-    netProfit: 0,
-    availableFunds: 0,
-    monthlyData: [],
-    categoryExpenses: []
-  })
+  const [dailyData, setDailyData] = useState<DailyData[]>([])
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedPeriod, setSelectedPeriod] = useState('12months')
+  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'monthly'>('daily')
+  const [selectedMonth, setSelectedMonth] = useState<string>('')
+  const [selectedDate, setSelectedDate] = useState<string>('')
+  const [showDetails, setShowDetails] = useState(false)
+  const [selectedDetails, setSelectedDetails] = useState<any[]>([])
+  const [detailTitle, setDetailTitle] = useState('')
 
   useEffect(() => {
     fetchProfitLossData()
-  }, [selectedPeriod])
+  }, [])
 
   const fetchProfitLossData = async () => {
     try {
       setLoading(true)
 
-      // Calculate date range based on selected period
-      const endDate = new Date()
-      const startDate = new Date()
-      
-      switch (selectedPeriod) {
-        case '1month':
-          startDate.setMonth(endDate.getMonth() - 1)
-          break
-        case '3months':
-          startDate.setMonth(endDate.getMonth() - 3)
-          break
-        case '6months':
-          startDate.setMonth(endDate.getMonth() - 6)
-          break
-        case '12months':
-        default:
-          startDate.setFullYear(endDate.getFullYear() - 1)
-          break
-      }
-
-      const startDateStr = startDate.toISOString().split('T')[0]
-      const endDateStr = endDate.toISOString().split('T')[0]
-
       // Fetch sales data
       const { data: salesData } = await supabase
         .from('sales')
         .select('*')
-        .gte('sale_date', startDateStr)
-        .lte('sale_date', endDateStr)
+        .order('sale_date', { ascending: false })
 
-      // Fetch purchases data
+      // Fetch invoices data
+      const { data: invoicesData } = await supabase
+        .from('invoices')
+        .select('*')
+        .order('invoice_date', { ascending: false })
+
+      // Fetch purchases/expenses data
       const { data: purchasesData } = await supabase
         .from('purchases')
         .select('*')
-        .gte('purchase_date', startDateStr)
-        .lte('purchase_date', endDateStr)
+        .order('purchase_date', { ascending: false })
 
-      // Fetch products data for cost calculation
+      // Fetch products data for profit calculation
       const { data: productsData } = await supabase
         .from('products')
         .select('*')
 
-      // Calculate totals
-      const totalRevenue = salesData?.reduce((sum, sale) => sum + sale.total_price, 0) || 0
-      const totalExpenses = purchasesData?.reduce((sum, purchase) => sum + purchase.total_cost, 0) || 0
-      
-      // Calculate actual net profit: (sale price - product cost) for each sale
-      let actualNetProfit = 0
-      if (salesData && productsData && salesData.length > 0) {
-        actualNetProfit = salesData.reduce((totalProfit, sale) => {
-          // Find the product for this sale
-          const product = productsData.find(p => p.name === sale.product_name)
-          if (product && product.wholesale_price !== null && product.wholesale_price !== undefined) {
-            // Convert to numbers and validate
-            const unitPrice = parseFloat(sale.unit_price) || 0
-            const costPrice = parseFloat(product.wholesale_price) || 0
-            const quantity = parseInt(sale.quantity) || 0
-            
-            // Calculate profit for this sale: (sale price - product cost) × quantity
-            const saleProfit = (unitPrice - costPrice) * quantity
-            
-            // Add to total profit if valid
-            if (!isNaN(saleProfit) && isFinite(saleProfit)) {
-              return totalProfit + saleProfit
-            }
-          }
-          return totalProfit
-        }, 0)
+      // Fetch invoice items for profit calculation
+      const { data: invoiceItemsData } = await supabase
+        .from('invoice_items')
+        .select('*')
+
+      if (salesData && invoicesData && purchasesData && productsData) {
+        // Process daily data
+        const daily = processDailyData(salesData, invoicesData, purchasesData, productsData, invoiceItemsData || [])
+        setDailyData(daily)
+
+        // Process monthly data
+        const monthly = processMonthlyData(salesData, invoicesData, purchasesData, productsData, invoiceItemsData || [])
+        setMonthlyData(monthly)
       }
-      
-      // Ensure netProfit is a valid number
-      const netProfit = isNaN(actualNetProfit) || !isFinite(actualNetProfit) ? 0 : actualNetProfit
-
-      // حساب الأموال المتاحة الحالية
-      // الأموال المتاحة = إجمالي الإيرادات - إجمالي المصروفات
-      const availableFunds = totalRevenue - totalExpenses
-
-      // Generate monthly data
-      const monthlyData = generateMonthlyData(salesData || [], purchasesData || [], productsData || [], startDate, endDate)
-
-      // Generate category expenses
-      const categoryExpenses = generateCategoryExpenses(purchasesData || [])
-
-      setData({
-        totalRevenue,
-        totalExpenses,
-        netProfit,
-        availableFunds,
-        monthlyData,
-        categoryExpenses
-      })
     } catch (error) {
       console.error('Error fetching profit/loss data:', error)
     } finally {
@@ -141,68 +106,342 @@ export default function ProfitLossPage() {
     }
   }
 
-  const generateMonthlyData = (sales: any[], purchases: any[], products: any[], startDate: Date, endDate: Date) => {
-    const monthlyData: any[] = []
-    const current = new Date(startDate)
+  const processDailyData = (sales: any[], invoices: any[], purchases: any[], products: any[], invoiceItems: any[]) => {
+    const dailyMap = new Map<string, DailyData>()
 
-    while (current <= endDate) {
-      const monthStr = current.toISOString().slice(0, 7) // YYYY-MM format
-      const monthName = current.toLocaleDateString('ar-EG', { month: 'short', year: 'numeric' })
-
-      const monthSales = sales.filter(sale => sale.sale_date.startsWith(monthStr))
-      const monthPurchases = purchases.filter(purchase => purchase.purchase_date.startsWith(monthStr))
-
-      const revenue = monthSales.reduce((sum, sale) => sum + sale.total_price, 0)
-      const expenses = monthPurchases.reduce((sum, purchase) => sum + purchase.total_cost, 0)
+    // Process sales
+    sales.forEach(sale => {
+      const date = sale.sale_date
+      if (!dailyMap.has(date)) {
+        dailyMap.set(date, {
+          date,
+          sales: 0,
+          expenses: 0,
+          profit: 0,
+          profitMargin: 0,
+          transactions: []
+        })
+      }
       
-      // Calculate actual profit for this month: (sale price - product cost) for each sale
-      const actualProfit = monthSales.reduce((totalProfit, sale) => {
-        const product = products.find((p: any) => p.name === sale.product_name)
-        if (product && product.wholesale_price !== null && product.wholesale_price !== undefined) {
-          // Convert to numbers and validate
-          const unitPrice = parseFloat(sale.unit_price) || 0
-          const costPrice = parseFloat(product.wholesale_price) || 0
-          const quantity = parseInt(sale.quantity) || 0
-          
-          // Calculate profit for this sale: (sale price - product cost) × quantity
-          const saleProfit = (unitPrice - costPrice) * quantity
-          
-          // Add to total profit if valid
-          if (!isNaN(saleProfit) && isFinite(saleProfit)) {
-            return totalProfit + saleProfit
-          }
-        }
-        return totalProfit
-      }, 0)
+      const daily = dailyMap.get(date)!
+      const product = products.find(p => p.name === sale.product_name)
+      const cost = product ? (product.wholesale_price || 0) * sale.quantity : 0
+      const revenue = sale.total_price
+      const profit = revenue - cost
       
-      // Ensure profit is a valid number
-      const profit = isNaN(actualProfit) || !isFinite(actualProfit) ? 0 : actualProfit
-
-      monthlyData.push({
-        month: monthName,
+      daily.sales += revenue
+      daily.profit += profit
+      daily.transactions.push({
+        type: 'sale',
+        product: sale.product_name,
+        quantity: sale.quantity,
         revenue,
-        expenses,
-        profit
+        cost,
+        profit,
+        customer: sale.customer_name,
+        time: sale.created_at
       })
-
-      current.setMonth(current.getMonth() + 1)
-    }
-
-    return monthlyData
-  }
-
-  const generateCategoryExpenses = (purchases: any[]) => {
-    const categories: { [key: string]: number } = {}
-
-    purchases.forEach(purchase => {
-      const category = purchase.type === 'product' ? 'مشتريات المنتجات' : 'مصروفات أخرى'
-      categories[category] = (categories[category] || 0) + purchase.total_cost
     })
 
-    return Object.entries(categories).map(([category, amount]) => ({
-      category,
-      amount
-    }))
+    // Process invoices
+    invoices.forEach(invoice => {
+      const date = invoice.invoice_date
+      if (!dailyMap.has(date)) {
+        dailyMap.set(date, {
+          date,
+          sales: 0,
+          expenses: 0,
+          profit: 0,
+          profitMargin: 0,
+          transactions: []
+        })
+      }
+      
+      const daily = dailyMap.get(date)!
+      const items = invoiceItems.filter(item => item.invoice_id === invoice.id)
+      
+      let totalRevenue = 0
+      let totalCost = 0
+      let totalProfit = 0
+      
+      items.forEach(item => {
+        const product = products.find(p => p.id === item.product_id)
+        const cost = product ? (product.wholesale_price || 0) * item.quantity : 0
+        const revenue = item.line_total
+        const profit = revenue - cost
+        
+        totalRevenue += revenue
+        totalCost += cost
+        totalProfit += profit
+      })
+      
+      daily.sales += totalRevenue
+      daily.profit += totalProfit
+      daily.transactions.push({
+        type: 'invoice',
+        invoiceNumber: invoice.invoice_number,
+        revenue: totalRevenue,
+        cost: totalCost,
+        profit: totalProfit,
+        customer: invoice.customer_name,
+        itemsCount: items.length,
+        time: invoice.created_at
+      })
+    })
+
+    // Process purchases/expenses
+    purchases.forEach(purchase => {
+      const date = purchase.purchase_date
+      if (!dailyMap.has(date)) {
+        dailyMap.set(date, {
+          date,
+          sales: 0,
+          expenses: 0,
+          profit: 0,
+          profitMargin: 0,
+          transactions: []
+        })
+      }
+      
+      const daily = dailyMap.get(date)!
+      daily.expenses += purchase.total_cost
+      daily.transactions.push({
+        type: 'expense',
+        description: purchase.product_name || purchase.expense_description,
+        amount: purchase.total_cost,
+        supplier: purchase.supplier_name,
+        time: purchase.created_at
+      })
+    })
+
+    // Calculate profit margins
+    dailyMap.forEach(daily => {
+      daily.profitMargin = daily.sales > 0 ? (daily.profit / daily.sales) * 100 : 0
+    })
+
+    return Array.from(dailyMap.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }
+
+  const processMonthlyData = (sales: any[], invoices: any[], purchases: any[], products: any[], invoiceItems: any[]) => {
+    const monthlyMap = new Map<string, MonthlyData>()
+
+    // Process sales
+    sales.forEach(sale => {
+      const month = sale.sale_date.substring(0, 7)
+      if (!monthlyMap.has(month)) {
+        monthlyMap.set(month, {
+          month,
+          totalSales: 0,
+          totalExpenses: 0,
+          netProfit: 0,
+          profitMargin: 0,
+          transactions: []
+        })
+      }
+      
+      const monthly = monthlyMap.get(month)!
+      const product = products.find(p => p.name === sale.product_name)
+      const cost = product ? (product.wholesale_price || 0) * sale.quantity : 0
+      const revenue = sale.total_price
+      const profit = revenue - cost
+      
+      monthly.totalSales += revenue
+      monthly.netProfit += profit
+      monthly.transactions.push({
+        type: 'sale',
+        product: sale.product_name,
+        quantity: sale.quantity,
+        revenue,
+        cost,
+        profit,
+        customer: sale.customer_name,
+        date: sale.sale_date,
+        time: sale.created_at
+      })
+    })
+
+    // Process invoices
+    invoices.forEach(invoice => {
+      const month = invoice.invoice_date.substring(0, 7)
+      if (!monthlyMap.has(month)) {
+        monthlyMap.set(month, {
+          month,
+          totalSales: 0,
+          totalExpenses: 0,
+          netProfit: 0,
+          profitMargin: 0,
+          transactions: []
+        })
+      }
+      
+      const monthly = monthlyMap.get(month)!
+      const items = invoiceItems.filter(item => item.invoice_id === invoice.id)
+      
+      let totalRevenue = 0
+      let totalCost = 0
+      let totalProfit = 0
+      
+      items.forEach(item => {
+        const product = products.find(p => p.id === item.product_id)
+        const cost = product ? (product.wholesale_price || 0) * item.quantity : 0
+        const revenue = item.line_total
+        const profit = revenue - cost
+        
+        totalRevenue += revenue
+        totalCost += cost
+        totalProfit += profit
+      })
+      
+      monthly.totalSales += totalRevenue
+      monthly.netProfit += totalProfit
+      monthly.transactions.push({
+        type: 'invoice',
+        invoiceNumber: invoice.invoice_number,
+        revenue: totalRevenue,
+        cost: totalCost,
+        profit: totalProfit,
+        customer: invoice.customer_name,
+        itemsCount: items.length,
+        date: invoice.invoice_date,
+        time: invoice.created_at
+      })
+    })
+
+    // Process purchases/expenses
+    purchases.forEach(purchase => {
+      const month = purchase.purchase_date.substring(0, 7)
+      if (!monthlyMap.has(month)) {
+        monthlyMap.set(month, {
+          month,
+          totalSales: 0,
+          totalExpenses: 0,
+          netProfit: 0,
+          profitMargin: 0,
+          transactions: []
+        })
+      }
+      
+      const monthly = monthlyMap.get(month)!
+      monthly.totalExpenses += purchase.total_cost
+      monthly.transactions.push({
+        type: 'expense',
+        description: purchase.product_name || purchase.expense_description,
+        amount: purchase.total_cost,
+        supplier: purchase.supplier_name,
+        date: purchase.purchase_date,
+        time: purchase.created_at
+      })
+    })
+
+    // Calculate profit margins
+    monthlyMap.forEach(monthly => {
+      monthly.profitMargin = monthly.totalSales > 0 ? (monthly.netProfit / monthly.totalSales) * 100 : 0
+    })
+
+    return Array.from(monthlyMap.values()).sort((a, b) => b.month.localeCompare(a.month))
+  }
+
+  const handleViewDetails = (data: any[], title: string) => {
+    setSelectedDetails(data)
+    setDetailTitle(title)
+    setShowDetails(true)
+  }
+
+  const printReport = (data: any[], title: string) => {
+    const printContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+        <style>
+          @media print {
+            body { margin: 0; padding: 20px; }
+            .no-print { display: none; }
+          }
+          body { 
+            font-family: 'Arial', sans-serif; 
+            margin: 20px; 
+            direction: rtl; 
+            text-align: right;
+          }
+          .header { 
+            text-align: center; 
+            border-bottom: 2px solid #333; 
+            padding-bottom: 20px; 
+            margin-bottom: 30px;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 20px 0;
+          }
+          th, td { 
+            border: 1px solid #ddd; 
+            padding: 12px; 
+            text-align: right;
+          }
+          th { 
+            background-color: #f8f9fa; 
+            font-weight: bold;
+          }
+          .print-btn { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            margin: 20px 0;
+          }
+          @media print {
+            .print-btn { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${title}</h1>
+          <p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}</p>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>النوع</th>
+              <th>التفاصيل</th>
+              <th>المبلغ</th>
+              <th>التاريخ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.map(item => `
+              <tr>
+                <td>${item.type === 'sale' ? 'مبيعة' : item.type === 'invoice' ? 'فاتورة' : 'مصروف'}</td>
+                <td>
+                  ${item.type === 'sale' ? `${item.product} - العميل: ${item.customer}` : ''}
+                  ${item.type === 'invoice' ? `فاتورة ${item.invoiceNumber} - العميل: ${item.customer}` : ''}
+                  ${item.type === 'expense' ? `${item.description} - المورد: ${item.supplier}` : ''}
+                </td>
+                <td>${item.type === 'expense' ? item.amount : item.revenue} ج.م</td>
+                <td>${new Date(item.date || item.time).toLocaleDateString('ar-EG')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <button class="print-btn no-print" onclick="window.print()">طباعة التقرير</button>
+      </body>
+      </html>
+    `
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(printContent)
+      printWindow.document.close()
+      printWindow.focus()
+    }
   }
 
   const formatCurrency = (amount: number) => {
@@ -214,8 +453,13 @@ export default function ProfitLossPage() {
     }).format(amount)
   }
 
-  const formatNumber = (value: number) => {
-    return new Intl.NumberFormat('ar-EG').format(value)
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('ar-EG')
+  }
+
+  const formatMonth = (monthString: string) => {
+    const [year, month] = monthString.split('-')
+    return new Date(parseInt(year), parseInt(month) - 1).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })
   }
 
   if (loading) {
@@ -230,224 +474,412 @@ export default function ProfitLossPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
       <QuickNavigation />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">الأرباح والخسائر</h1>
-          <p className="text-gray-600">تحليل الأداء المالي</p>
-        </div>
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-        >
-          <option value="1month">آخر شهر</option>
-          <option value="3months">آخر 3 أشهر</option>
-          <option value="6months">آخر 6 أشهر</option>
-          <option value="12months">آخر 12 شهر</option>
-        </select>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">الأموال المتاحة</p>
-              <p className={`text-2xl font-bold ${data.availableFunds >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                {formatCurrency(data.availableFunds)}
-              </p>
-            </div>
-            <div className={`p-3 rounded-full ${data.availableFunds >= 0 ? 'bg-blue-100' : 'bg-red-100'}`}>
-              <DollarSign className={`h-6 w-6 ${data.availableFunds >= 0 ? 'text-blue-600' : 'text-red-600'}`} />
-            </div>
+        <div className="space-y-8">
+          {/* Header */}
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">تقرير الأرباح والخسائر</h1>
+            <p className="text-gray-600 text-lg">تحليل شامل للأرباح والخسائر اليومية والشهرية</p>
           </div>
-        </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">إجمالي الإيرادات</p>
-              <p className="text-2xl font-bold text-green-600">{formatCurrency(data.totalRevenue)}</p>
-            </div>
-            <div className="p-3 bg-green-100 rounded-full">
-              <TrendingUp className="h-6 w-6 text-green-600" />
+          {/* Tabs */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setSelectedPeriod('daily')}
+                className={`px-6 py-3 text-sm font-medium ${
+                  selectedPeriod === 'daily'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                التقارير اليومية
+              </button>
+              <button
+                onClick={() => setSelectedPeriod('monthly')}
+                className={`px-6 py-3 text-sm font-medium ${
+                  selectedPeriod === 'monthly'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                التقارير الشهرية
+              </button>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">إجمالي المصروفات</p>
-              <p className="text-2xl font-bold text-red-600">{formatCurrency(data.totalExpenses)}</p>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-6">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-600 mb-2">الأموال المتاحة</p>
+                  <p className={`text-3xl font-bold ${dailyData.reduce((sum, day) => sum + day.profit, 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                    {formatCurrency(dailyData.reduce((sum, day) => sum + day.profit, 0))}
+                  </p>
+                </div>
+                <div className={`p-4 rounded-2xl shadow-lg ${dailyData.reduce((sum, day) => sum + day.profit, 0) >= 0 ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-red-500 to-red-600'}`}>
+                  <DollarSign className="h-7 w-7 text-white" />
+                </div>
+              </div>
             </div>
-            <div className="p-3 bg-red-100 rounded-full">
-              <TrendingDown className="h-6 w-6 text-red-600" />
+
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-600 mb-2">إجمالي المبيعات</p>
+                  <p className="text-3xl font-bold text-green-600">{formatCurrency(dailyData.reduce((sum, day) => sum + day.sales, 0))}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-green-500 to-green-600 shadow-lg">
+                  <TrendingUp className="h-7 w-7 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-600 mb-2">إجمالي المصروفات</p>
+                  <p className="text-3xl font-bold text-red-600">{formatCurrency(dailyData.reduce((sum, day) => sum + day.expenses, 0))}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-red-500 to-red-600 shadow-lg">
+                  <ShoppingCart className="h-7 w-7 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-600 mb-2">صافي الربح</p>
+                  <p className={`text-3xl font-bold ${dailyData.reduce((sum, day) => sum + day.profit, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(dailyData.reduce((sum, day) => sum + day.profit, 0))}
+                  </p>
+                </div>
+                <div className={`p-4 rounded-2xl shadow-lg ${dailyData.reduce((sum, day) => sum + day.profit, 0) >= 0 ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-red-600'}`}>
+                  <Package className="h-7 w-7 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-600 mb-2">حصة الشريك الثالث (ربنا)</p>
+                  <p className="text-3xl font-bold text-purple-600">{formatCurrency((dailyData.reduce((sum, day) => sum + day.profit, 0)) > 0 ? (dailyData.reduce((sum, day) => sum + day.profit, 0)) * 0.1 : 0)}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-500 to-purple-600 shadow-lg">
+                  <DollarSign className="h-7 w-7 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-600 mb-2">حصة يزن</p>
+                  <p className="text-3xl font-bold text-indigo-600">{formatCurrency((() => {
+                    const availableFunds = dailyData.reduce((sum, day) => sum + day.profit, 0);
+                    const godShare = availableFunds > 0 ? availableFunds * 0.1 : 0;
+                    const remainingFunds = availableFunds - godShare;
+                    return remainingFunds > 0 ? remainingFunds * 0.45 : 0;
+                  })())}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-indigo-600 shadow-lg">
+                  <DollarSign className="h-7 w-7 text-white" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-600 mb-2">حصة محمود</p>
+                  <p className="text-3xl font-bold text-teal-600">{formatCurrency((() => {
+                    const availableFunds = dailyData.reduce((sum, day) => sum + day.profit, 0);
+                    const godShare = availableFunds > 0 ? availableFunds * 0.1 : 0;
+                    const remainingFunds = availableFunds - godShare;
+                    return remainingFunds > 0 ? remainingFunds * 0.45 : 0;
+                  })())}</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-500 to-teal-600 shadow-lg">
+                  <DollarSign className="h-7 w-7 text-white" />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">صافي الربح</p>
-              <p className={`text-2xl font-bold ${data.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(data.netProfit)}
-              </p>
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Profit Trend Chart */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">اتجاه الأرباح اليومية</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={dailyData.slice(0, 30)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickFormatter={(value) => formatDate(value)}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}ك`} />
+                    <Tooltip 
+                      formatter={(value: any) => [formatCurrency(value), '']}
+                      labelFormatter={(label) => formatDate(label)}
+                    />
+                    <Line type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2} name="الربح" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-            <div className={`p-3 rounded-full ${data.netProfit >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-              <BarChart3 className={`h-6 w-6 ${data.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+
+            {/* Sales vs Expenses Chart */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">المبيعات مقابل المصروفات</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dailyData.slice(0, 30)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickFormatter={(value) => formatDate(value)}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                    />
+                    <YAxis tickFormatter={(value) => `${(value / 1000).toFixed(0)}ك`} />
+                    <Tooltip 
+                      formatter={(value: any) => [formatCurrency(value), '']}
+                      labelFormatter={(label) => formatDate(label)}
+                    />
+                    <Bar dataKey="sales" fill="#10B981" name="المبيعات" />
+                    <Bar dataKey="expenses" fill="#EF4444" name="المصروفات" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Monthly Trend Chart */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">الاتجاه الشهري</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data.monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis tickFormatter={formatNumber} />
-                <Tooltip 
-                  formatter={(value: number) => formatCurrency(value)}
-                  labelStyle={{ direction: 'rtl' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="#10b981" 
-                  strokeWidth={2}
-                  name="الإيرادات"
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="expenses" 
-                  stroke="#ef4444" 
-                  strokeWidth={2}
-                  name="المصروفات"
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="profit" 
-                  stroke="#6366f1" 
-                  strokeWidth={2}
-                  name="الربح"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+          {/* Data Tables */}
+          {selectedPeriod === 'daily' ? (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">التقارير اليومية</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">التاريخ</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">المبيعات</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">المصروفات</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الربح</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">هامش الربح</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {dailyData.map((day) => (
+                      <tr key={day.date} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatDate(day.date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                          {formatCurrency(day.sales)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
+                          {formatCurrency(day.expenses)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                          {formatCurrency(day.profit)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {day.profitMargin.toFixed(1)}%
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleViewDetails(day.transactions, `تفاصيل ${formatDate(day.date)}`)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              title="عرض التفاصيل"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => printReport(day.transactions, `تقرير ${formatDate(day.date)}`)}
+                              className="text-green-600 hover:text-green-900"
+                              title="طباعة التقرير"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">التقارير الشهرية</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الشهر</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">إجمالي المبيعات</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">إجمالي المصروفات</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">صافي الربح</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">هامش الربح</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {monthlyData.map((month) => (
+                      <tr key={month.month} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatMonth(month.month)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                          {formatCurrency(month.totalSales)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-600">
+                          {formatCurrency(month.totalExpenses)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                          {formatCurrency(month.netProfit)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {month.profitMargin.toFixed(1)}%
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleViewDetails(month.transactions, `تفاصيل ${formatMonth(month.month)}`)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              title="عرض التفاصيل"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => printReport(month.transactions, `تقرير ${formatMonth(month.month)}`)}
+                              className="text-green-600 hover:text-green-900"
+                              title="طباعة التقرير"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-        {/* Category Expenses Chart */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">توزيع المصروفات</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.categoryExpenses}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="category" />
-                <YAxis tickFormatter={formatNumber} />
-                <Tooltip 
-                  formatter={(value: number) => formatCurrency(value)}
-                  labelStyle={{ direction: 'rtl' }}
-                />
-                <Bar dataKey="amount" fill="#ef4444" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+          {/* Details Modal */}
+          {showDetails && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{detailTitle}</h3>
+                    <p className="text-sm text-gray-600">جميع المعاملات والتفاصيل</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => printReport(selectedDetails, detailTitle)}
+                      className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      title="طباعة التقرير"
+                    >
+                      <Printer className="h-4 w-4 ml-2" />
+                      طباعة
+                    </button>
+                    <button
+                      onClick={() => setShowDetails(false)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
 
-      {/* Detailed Analysis */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">التحليل التفصيلي</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">متوسط الإيرادات الشهرية</p>
-            <p className="text-lg font-semibold text-gray-900">
-              {formatCurrency(data.monthlyData.length > 0 ? data.totalRevenue / data.monthlyData.length : 0)}
-            </p>
-          </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">متوسط المصروفات الشهرية</p>
-            <p className="text-lg font-semibold text-gray-900">
-              {formatCurrency(data.monthlyData.length > 0 ? data.totalExpenses / data.monthlyData.length : 0)}
-            </p>
-          </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">هامش الربح</p>
-            <p className="text-lg font-semibold text-gray-900">
-              {data.totalRevenue > 0 ? ((data.netProfit / data.totalRevenue) * 100).toFixed(1) : 0}%
-            </p>
-          </div>
-          <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">نسبة المصروفات</p>
-            <p className="text-lg font-semibold text-gray-900">
-              {data.totalRevenue > 0 ? ((data.totalExpenses / data.totalRevenue) * 100).toFixed(1) : 0}%
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Monthly Breakdown Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">التفصيل الشهري</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  الشهر
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  الإيرادات
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  المصروفات
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  صافي الربح
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  هامش الربح
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {data.monthlyData.map((month, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {month.month}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600">
-                    {formatCurrency(month.revenue)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
-                    {formatCurrency(month.expenses)}
-                  </td>
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${
-                    month.profit >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {formatCurrency(month.profit)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {month.revenue > 0 ? ((month.profit / month.revenue) * 100).toFixed(2) : 0}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">النوع</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">التفاصيل</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">المبلغ</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">التاريخ</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">الوقت</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {selectedDetails.map((item, index) => (
+                          <tr key={index}>
+                            <td className="px-4 py-3 text-sm">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                item.type === 'sale' ? 'bg-green-100 text-green-800' :
+                                item.type === 'invoice' ? 'bg-blue-100 text-blue-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {item.type === 'sale' ? 'مبيعة' : item.type === 'invoice' ? 'فاتورة' : 'مصروف'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {item.type === 'sale' && (
+                                <div>
+                                  <div className="font-medium">{item.product}</div>
+                                  <div className="text-sm text-gray-500">العميل: {item.customer}</div>
+                                  <div className="text-sm text-gray-500">الكمية: {item.quantity}</div>
+                                </div>
+                              )}
+                              {item.type === 'invoice' && (
+                                <div>
+                                  <div className="font-medium">فاتورة {item.invoiceNumber}</div>
+                                  <div className="text-sm text-gray-500">العميل: {item.customer}</div>
+                                  <div className="text-sm text-gray-500">عدد الأصناف: {item.itemsCount}</div>
+                                </div>
+                              )}
+                              {item.type === 'expense' && (
+                                <div>
+                                  <div className="font-medium">{item.description}</div>
+                                  <div className="text-sm text-gray-500">المورد: {item.supplier}</div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium">
+                              {item.type === 'expense' ? (
+                                <span className="text-red-600">-{formatCurrency(item.amount)}</span>
+                              ) : (
+                                <span className="text-green-600">+{formatCurrency(item.revenue)}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {item.date ? formatDate(item.date) : formatDate(item.time)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {new Date(item.time).toLocaleTimeString('ar-EG')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

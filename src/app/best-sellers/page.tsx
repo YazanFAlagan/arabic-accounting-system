@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import QuickNavigation from '@/components/QuickNavigation'
-import { BarChart3, TrendingUp, Package, DollarSign } from 'lucide-react'
+import { BarChart3, TrendingUp, Package, DollarSign, Printer } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 interface BestSellerData {
@@ -57,53 +57,59 @@ export default function BestSellersPage() {
       const startDateStr = startDate.toISOString().split('T')[0]
       const endDateStr = endDate.toISOString().split('T')[0]
 
-      // Fetch sales data
-      const { data: salesData } = await supabase
-        .from('sales')
+      // Fetch invoices data only
+      const { data: invoicesData } = await supabase
+        .from('invoices')
         .select('*')
-        .gte('sale_date', startDateStr)
-        .lte('sale_date', endDateStr)
+        .gte('invoice_date', startDateStr)
+        .lte('invoice_date', endDateStr)
 
-      if (salesData) {
+      // Fetch invoice items for detailed analysis
+      const { data: invoiceItemsData } = await supabase
+        .from('invoice_items')
+        .select('*')
+
+      if (invoicesData && invoiceItemsData) {
         // Group by product and calculate metrics
         const productMetrics: { [key: string]: BestSellerData } = {}
 
-        salesData.forEach(sale => {
-          const productName = sale.product_name
-          if (!productMetrics[productName]) {
-            productMetrics[productName] = {
-              product_name: productName,
-              total_quantity: 0,
-              total_revenue: 0,
-              sales_count: 0,
-              average_price: 0
+        // Process invoice items data
+        invoiceItemsData.forEach(item => {
+          const invoice = invoicesData.find(inv => inv.id === item.invoice_id)
+          if (invoice && invoice.invoice_date >= startDateStr && invoice.invoice_date <= endDateStr) {
+            const productName = item.product_name
+            if (!productMetrics[productName]) {
+              productMetrics[productName] = {
+                product_name: productName,
+                total_quantity: 0,
+                total_revenue: 0,
+                sales_count: 0,
+                average_price: 0
+              }
             }
-          }
 
-          productMetrics[productName].total_quantity += sale.quantity
-          productMetrics[productName].total_revenue += sale.total_price
-          productMetrics[productName].sales_count += 1
+            productMetrics[productName].total_quantity += item.quantity
+            productMetrics[productName].total_revenue += item.line_total
+            productMetrics[productName].sales_count += 1
+          }
         })
 
-        // Calculate average prices and sort
-        const bestSellersArray = Object.values(productMetrics).map(product => ({
-          ...product,
-          average_price: product.total_revenue / product.total_quantity
-        }))
+        // Calculate average prices
+        Object.values(productMetrics).forEach(product => {
+          product.average_price = product.total_revenue / product.total_quantity
+        })
 
-        // Sort by quantity (default) or revenue
-        bestSellersArray.sort((a, b) => 
-          viewMode === 'quantity' 
-            ? b.total_quantity - a.total_quantity
-            : b.total_revenue - a.total_revenue
-        )
+        // Sort by selected metric
+        const sortedProducts = Object.values(productMetrics).sort((a, b) => {
+          if (viewMode === 'quantity') {
+            return b.total_quantity - a.total_quantity
+          } else {
+            return b.total_revenue - a.total_revenue
+          }
+        })
 
-        setBestSellers(bestSellersArray)
-
-        // Generate trend data for top 5 products
-        const topProducts = bestSellersArray.slice(0, 5)
-        const trends = generateTrendData(salesData, topProducts, startDate, endDate)
-        setTrendData(trends)
+        setBestSellers(sortedProducts)
+        generateTrendData(invoicesData, invoiceItemsData)
       }
     } catch (error) {
       console.error('Error fetching best sellers data:', error)
@@ -112,29 +118,33 @@ export default function BestSellersPage() {
     }
   }
 
-  const generateTrendData = (sales: any[], topProducts: BestSellerData[], startDate: Date, endDate: Date) => {
+  const generateTrendData = (invoices: any[], invoiceItems: any[]) => {
     const trendData: TrendData[] = []
-    const current = new Date(startDate)
+    const current = new Date(invoices[0].invoice_date) // Start from the first invoice date
 
-    while (current <= endDate) {
+    while (current <= new Date(invoices[invoices.length - 1].invoice_date)) { // End at the last invoice date
       const monthStr = current.toISOString().slice(0, 7) // YYYY-MM format
       const monthName = current.toLocaleDateString('ar-EG', { month: 'short', year: 'numeric' })
 
       const monthData: TrendData = { month: monthName }
 
-      topProducts.forEach(product => {
-        const monthSales = sales.filter(sale => 
-          sale.sale_date.startsWith(monthStr) && sale.product_name === product.product_name
+      // Get all products sold in this month
+      const productsSoldInMonth = invoiceItems
+        .filter(item => 
+          item.invoice_date.startsWith(monthStr)
         )
-        const quantity = monthSales.reduce((sum, sale) => sum + sale.quantity, 0)
-        monthData[product.product_name] = quantity
-      })
+        .map(item => item.product_name)
+
+      // Count unique products sold in this month
+      const uniqueProductsSold = [...new Set(productsSoldInMonth)].length
+
+      monthData['Total Products Sold'] = uniqueProductsSold
 
       trendData.push(monthData)
       current.setMonth(current.getMonth() + 1)
     }
 
-    return trendData
+    setTrendData(trendData)
   }
 
   const formatCurrency = (amount: number) => {
@@ -148,6 +158,143 @@ export default function BestSellersPage() {
 
   const formatNumber = (value: number) => {
     return new Intl.NumberFormat('ar-EG').format(value)
+  }
+
+  const printBestSellersReport = () => {
+    const printContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>تقرير الأكثر مبيعاً</title>
+        <style>
+          @media print {
+            body { margin: 0; padding: 20px; }
+            .no-print { display: none; }
+          }
+          body { 
+            font-family: 'Arial', sans-serif; 
+            margin: 20px; 
+            direction: rtl; 
+            text-align: right;
+          }
+          .header { 
+            text-align: center; 
+            border-bottom: 2px solid #333; 
+            padding-bottom: 20px; 
+            margin-bottom: 30px;
+          }
+          .summary { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 20px; 
+            margin-bottom: 30px;
+          }
+          .summary-card { 
+            border: 1px solid #ddd; 
+            padding: 15px; 
+            border-radius: 8px; 
+            text-align: center;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 20px 0;
+          }
+          th, td { 
+            border: 1px solid #ddd; 
+            padding: 12px; 
+            text-align: right;
+          }
+          th { 
+            background-color: #f8f9fa; 
+            font-weight: bold;
+          }
+          .print-btn { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            margin: 20px 0;
+          }
+          @media print {
+            .print-btn { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>تقرير الأكثر مبيعاً</h1>
+          <h2>الفترة: ${selectedPeriod === '1month' ? 'آخر شهر' : 
+                         selectedPeriod === '3months' ? 'آخر 3 أشهر' : 
+                         selectedPeriod === '6months' ? 'آخر 6 أشهر' : 'آخر 12 شهر'}</h2>
+          <p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}</p>
+        </div>
+        
+        <div class="summary">
+          <div class="summary-card">
+            <h3>المنتج الأكثر مبيعاً</h3>
+            <p>${bestSellers[0]?.product_name || 'لا توجد بيانات'}</p>
+            <p>${bestSellers[0]?.total_quantity || 0} وحدة</p>
+          </div>
+          <div class="summary-card">
+            <h3>إجمالي المنتجات المباعة</h3>
+            <p>${formatNumber(bestSellers.reduce((sum, product) => sum + product.total_quantity, 0))} وحدة</p>
+          </div>
+          <div class="summary-card">
+            <h3>إجمالي الإيرادات</h3>
+            <p>${formatCurrency(bestSellers.reduce((sum, product) => sum + product.total_revenue, 0))}</p>
+          </div>
+          <div class="summary-card">
+            <h3>متوسط سعر البيع</h3>
+            <p>${formatCurrency(bestSellers.length > 0 
+              ? bestSellers.reduce((sum, product) => sum + product.average_price, 0) / bestSellers.length 
+              : 0
+            )}</p>
+          </div>
+        </div>
+        
+        <h3>تفاصيل المنتجات</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>الترتيب</th>
+              <th>المنتج</th>
+              <th>الكمية المباعة</th>
+              <th>إجمالي الإيرادات</th>
+              <th>عدد المبيعات</th>
+              <th>متوسط السعر</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bestSellers.map((product, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${product.product_name}</td>
+                <td>${formatNumber(product.total_quantity)}</td>
+                <td>${formatCurrency(product.total_revenue)}</td>
+                <td>${formatNumber(product.sales_count)}</td>
+                <td>${formatCurrency(product.average_price)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <button class="print-btn no-print" onclick="window.print()">طباعة التقرير</button>
+      </body>
+      </html>
+    `
+
+    // Open print window
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(printContent)
+      printWindow.document.close()
+      printWindow.focus()
+    }
   }
 
   // Colors for charts
@@ -173,6 +320,15 @@ export default function BestSellersPage() {
           <p className="text-gray-600">تحليل أداء المنتجات والاتجاهات</p>
         </div>
         <div className="flex gap-4">
+          <button
+            onClick={printBestSellersReport}
+            disabled={bestSellers.length === 0}
+            className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 transition-colors"
+            title="طباعة التقرير"
+          >
+            <Printer className="h-5 w-5 ml-2" />
+            طباعة التقرير
+          </button>
           <select
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value as 'quantity' | 'revenue')}

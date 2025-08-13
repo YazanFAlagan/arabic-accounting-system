@@ -15,7 +15,7 @@ import {
 
 const quickNavItems = [
   { name: 'لوحة التحكم', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'المبيعات', href: '/sales', icon: ShoppingCart },
+  { name: 'الفواتير', href: '/invoices', icon: FileText },
   { name: 'المشتريات', href: '/purchases', icon: Package },
   { name: 'المخزون', href: '/inventory', icon: Package },
   { name: 'المواد الخام', href: '/raw-materials', icon: Package },

@@ -38,7 +38,7 @@ export default function RawMaterialsPage() {
   const { user } = useAuth()
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([])
   const [usages, setUsages] = useState<RawMaterialUsage[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterLowStock, setFilterLowStock] = useState(false)
 
@@ -81,7 +81,11 @@ export default function RawMaterialsPage() {
 
   // Fetch all data
   const fetchAllData = async () => {
-    if (!user?.id) return
+    if (!user?.id) {
+      // If user is not ready, ensure we are not stuck in loading state
+      setLoading(false)
+      return
+    }
 
     try {
       setLoading(true)
@@ -114,6 +118,11 @@ export default function RawMaterialsPage() {
   }
 
   useEffect(() => {
+    if (!user?.id) {
+      // Avoid calling fetch when user is not yet available
+      setLoading(false)
+      return
+    }
     fetchAllData()
   }, [user?.id])
 
