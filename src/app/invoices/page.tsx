@@ -21,6 +21,7 @@ interface Invoice {
   items_count: number
   total_quantity: number
   created_at: string
+  available_funds?: number
 }
 
 interface InvoiceItem {
@@ -58,6 +59,13 @@ export default function InvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [invoiceDetails, setInvoiceDetails] = useState<InvoiceItem[]>([])
   
+  // Statistics state
+  const [stats, setStats] = useState({
+    totalSales: 0,
+    totalRevenue: 0,
+    totalQuantity: 0
+  })
+  
   // Invoice form state
   const [invoiceForm, setInvoiceForm] = useState({
     customer_name: '',
@@ -80,21 +88,103 @@ export default function InvoicesPage() {
   })
 
   useEffect(() => {
-    fetchInvoices()
-    fetchProducts()
+    const initializeData = async () => {
+      try {
+        console.log('بدء تهيئة البيانات...')
+        
+        // جلب المنتجات أولاً
+        console.log('جلب المنتجات...')
+        await fetchProducts()
+        
+        // ثم جلب الفواتير
+        console.log('جلب الفواتير...')
+        await fetchInvoices()
+        
+        console.log('تم تهيئة البيانات بنجاح')
+      } catch (error) {
+        console.error('خطأ في تهيئة البيانات:', error)
+        console.error('تفاصيل الخطأ:', JSON.stringify(error, null, 2))
+      }
+    }
+    
+    initializeData()
   }, [])
 
   const fetchInvoices = async () => {
     try {
+      setLoading(true)
+      console.log('بدء جلب الفواتير...')
+      
+      // جلب الفواتير
       const { data, error } = await supabase
         .from('invoices_summary')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('خطأ في جلب الفواتير:', error)
+        throw error
+      }
+      
+      console.log('تم جلب الفواتير:', data?.length || 0, 'فاتورة')
+      
+      // تعيين الفواتير فوراً
       setInvoices(data || [])
+      
+      // حساب الإحصائيات الأساسية
+      const totalSales = data?.length || 0
+      const totalRevenue = data?.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0) || 0
+      const totalQuantity = data?.reduce((sum, invoice) => sum + (invoice.total_quantity || 0), 0) || 0
+      
+                          // تعيين الإحصائيات الأساسية
+          setStats({
+            totalSales,
+            totalRevenue,
+            totalQuantity
+          })
+      
+              // محاولة تحديث الفواتير (اختياري)
+        try {
+          console.log('محاولة تحديث الفواتير...')
+          
+          // انتظار جلب المنتجات أولاً
+          if (products.length === 0) {
+            console.log('المنتجات لم يتم جلبها بعد، انتظار...')
+            // محاولة جلب المنتجات مرة أخرى
+            await fetchProducts()
+          }
+          
+          if (products.length > 0) {
+            console.log('تم جلب بيانات المنتجات:', products.length, 'منتج')
+            
+            // تحديث الفواتير
+            const updatedInvoices = (data || []).map(invoice => ({
+              ...invoice,
+              available_funds: invoice.total_amount || 0
+            }))
+            
+            console.log('تم تحديث الفواتير')
+            
+            // تحديث الفواتير
+            setInvoices(updatedInvoices)
+          } else {
+            console.log('لا توجد بيانات منتجات')
+          }
+        } catch (updateError) {
+          console.error('خطأ في تحديث الفواتير:', updateError)
+        }
+      
     } catch (error) {
-      console.error('Error fetching invoices:', error)
+      console.error('خطأ عام في جلب الفواتير:', error)
+      setInvoices([])
+      setStats({
+        totalSales: 0,
+        totalRevenue: 0,
+        totalQuantity: 0
+      })
+    } finally {
+      setLoading(false)
+      console.log('انتهى جلب الفواتير')
     }
   }
 
@@ -287,19 +377,77 @@ export default function InvoicesPage() {
 
   const fetchProducts = async () => {
     try {
+      console.log('بدء جلب المنتجات...')
+      
+      // اختبار الاتصال العام بقاعدة البيانات
+      console.log('اختبار الاتصال العام بقاعدة البيانات...')
+      try {
+        const { data: testData, error: testError } = await supabase
+          .from('invoices_summary')
+          .select('count')
+          .limit(1)
+        
+        if (testError) {
+          console.error('خطأ في الاتصال العام بقاعدة البيانات:', testError)
+          console.error('تفاصيل الخطأ:', JSON.stringify(testError, null, 2))
+        } else {
+          console.log('الاتصال العام بقاعدة البيانات يعمل بنجاح')
+        }
+      } catch (testError) {
+        console.error('خطأ في اختبار الاتصال العام:', testError)
+      }
+      
+      // التحقق من الاتصال بجدول المنتجات
+      console.log('اختبار الاتصال بجدول المنتجات...')
+      const { data: connectionTest, error: connectionError } = await supabase
+        .from('products')
+        .select('count')
+        .limit(1)
+      
+      console.log('نتيجة اختبار الاتصال:', { connectionTest, connectionError })
+      
+      if (connectionError) {
+        console.error('خطأ في الاتصال بجدول المنتجات:', connectionError)
+        console.error('نوع الخطأ:', typeof connectionError)
+        console.error('مفاتيح الخطأ:', Object.keys(connectionError))
+        console.error('تفاصيل الخطأ:', JSON.stringify(connectionError, null, 2))
+        setProducts([])
+        return
+      }
+      
+      console.log('تم الاتصال بجدول المنتجات بنجاح')
+      
+      // جلب المنتجات
+      console.log('جلب بيانات المنتجات...')
       const { data, error } = await supabase
         .from('products')
         .select('id, name, wholesale_price, retail_price, shop_price, selling_price, current_stock')
         .order('name')
 
-      if (error) throw error
+      console.log('نتيجة جلب المنتجات:', { data, error })
+
+      if (error) {
+        console.error('خطأ في جلب بيانات المنتجات:', error)
+        console.error('نوع الخطأ:', typeof error)
+        console.error('مفاتيح الخطأ:', Object.keys(error))
+        console.error('تفاصيل الخطأ:', JSON.stringify(error, null, 2))
+        setProducts([])
+        return
+      }
+      
+      console.log('تم جلب المنتجات بنجاح:', data?.length || 0, 'منتج')
       setProducts(data || [])
+      
     } catch (error) {
-      console.error('Error fetching products:', error)
-    } finally {
-      setLoading(false)
+      console.error('خطأ عام في جلب المنتجات:', error)
+      console.error('نوع الخطأ:', typeof error)
+      console.error('مفاتيح الخطأ:', error ? Object.keys(error) : 'لا توجد مفاتيح')
+      console.error('تفاصيل الخطأ:', JSON.stringify(error, null, 2))
+      setProducts([])
     }
   }
+
+
 
   const getProductPriceBySaleType = (product: Product, saleType: string) => {
     switch (saleType) {
@@ -506,10 +654,58 @@ export default function InvoicesPage() {
     }
   }
 
-  const filteredInvoices = invoices.filter(invoice =>
-    invoice.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const getArabicDayName = (dateString: string) => {
+    try {
+      const date = new Date(dateString)
+      const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+      return days[date.getDay()]
+    } catch (error) {
+      return 'غير محدد'
+    }
+  }
+
+  // متغيرات للفلاتر
+  const [dateFilter, setDateFilter] = useState('')
+  const [sortBy, setSortBy] = useState('')
+
+  const filteredInvoices = invoices.filter(invoice => {
+    // فلتر البحث
+    const matchesSearch = invoice.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         invoice.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    // فلتر التاريخ
+    const matchesDate = !dateFilter || invoice.invoice_date === dateFilter
+    
+    return matchesSearch && matchesDate
+  }).sort((a, b) => {
+    // الترتيب
+    switch (sortBy) {
+      case 'profit_high':
+        return (b.total_profit || 0) - (a.total_profit || 0)
+      case 'profit_low':
+        return (a.total_profit || 0) - (b.total_profit || 0)
+      case 'funds_high':
+        return (b.available_funds || 0) - (a.available_funds || 0)
+      case 'funds_low':
+        return (a.available_funds || 0) - (b.available_funds || 0)
+      default:
+        return 0
+    }
+  })
+
+  // حساب الإحصائيات من البيانات المفلترة
+  const calculateFilteredStats = () => {
+    return {
+      totalSales: filteredInvoices.length,
+      totalRevenue: filteredInvoices.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0),
+      totalQuantity: filteredInvoices.reduce((sum, invoice) => sum + (invoice.total_quantity || 0), 0),
+      todayInvoices: filteredInvoices.filter(invoice => 
+        invoice.invoice_date === new Date().toISOString().split('T')[0]
+      ).length
+    }
+  }
+
+  const filteredStats = calculateFilteredStats()
 
   if (loading) {
     return (
@@ -528,7 +724,7 @@ export default function InvoicesPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">الفواتير</h1>
-              <p className="text-gray-600">إدارة فواتير المبيعات متعددة الأصناف</p>
+              <p className="text-gray-600">إدارة فواتير المبيعات متعددة الأصناف مع نظام الأرباح والأموال المتاحة</p>
             </div>
             <button
               onClick={() => setShowCreateForm(true)}
@@ -539,17 +735,159 @@ export default function InvoicesPage() {
             </button>
           </div>
 
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-            <input
-              type="text"
-              placeholder="البحث في الفواتير..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pr-10 pl-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
+          {/* Search and Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+              <input
+                type="text"
+                placeholder="البحث في الفواتير..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pr-10 pl-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                placeholder="اختر التاريخ"
+              />
+            </div>
+            
+            <div>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                <option value="">ترتيب حسب...</option>
+
+                <option value="funds_high">الأموال المتاحة (الأعلى أولاً)</option>
+                <option value="funds_low">الأموال المتاحة (الأقل أولاً)</option>
+              </select>
+            </div>
+            
+
+            
+            <button
+              onClick={() => {
+                setSearchTerm('')
+                setDateFilter('')
+                setSortBy('')
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              إعادة تعيين
+            </button>
+            
+            <button
+              onClick={() => {
+                const today = new Date().toISOString().split('T')[0]
+                setDateFilter(today)
+              }}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              فواتير اليوم
+            </button>
+            
+            <button
+              onClick={() => {
+                const yesterday = new Date()
+                yesterday.setDate(yesterday.getDate() - 1)
+                const yesterdayStr = yesterday.toISOString().split('T')[0]
+                setDateFilter(yesterdayStr)
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              فواتير الأمس
+            </button>
           </div>
+
+          {/* Statistics Cards */}
+          <div className="space-y-4">
+            {/* رسالة توضيحية للفلاتر النشطة */}
+                            {(dateFilter || searchTerm || sortBy) && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <svg className="h-5 w-5 text-blue-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm text-blue-800">
+                    <strong>ملاحظة:</strong> الإحصائيات تعرض البيانات المفلترة حالياً. 
+                    {dateFilter && ` التاريخ: ${new Date(dateFilter).toLocaleDateString('ar-EG')}`}
+                    {searchTerm && ` البحث: ${searchTerm}`}
+
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">إجمالي المبيعات</p>
+                  <p className="text-2xl font-bold text-gray-900">{filteredStats.totalSales || 0}</p>
+                </div>
+                <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">إجمالي الإيرادات</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(filteredStats.totalRevenue || 0)}</p>
+                </div>
+                <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center">
+                  <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">إجمالي الكمية</p>
+                  <p className="text-2xl font-bold text-gray-900">{filteredStats.totalQuantity || 0}</p>
+                </div>
+                <div className="h-12 w-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+
+
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">فواتير اليوم</p>
+                  <p className="text-2xl font-bold text-orange-600">
+                    {filteredStats.todayInvoices}
+                  </p>
+                </div>
+                <div className="h-12 w-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                  <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
           {/* Success Message */}
           {showSuccessMessage && savedInvoice && (
@@ -852,9 +1190,38 @@ export default function InvoicesPage() {
             </div>
           )}
 
+          {/* Results Count */}
+          {invoices.length > 0 && (
+            <div className="bg-white rounded-lg p-4 border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  {filteredInvoices.length === invoices.length ? (
+                    `عرض جميع الفواتير (${invoices.length})`
+                  ) : (
+                    `عرض ${filteredInvoices.length} من ${invoices.length} فاتورة`
+                  )}
+                </div>
+                {(dateFilter || searchTerm || sortBy) && (
+                  <div className="text-xs text-gray-500">
+                    الفلاتر النشطة: 
+                    {dateFilter && <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded">التاريخ: {new Date(dateFilter).toLocaleDateString('ar-EG')}</span>}
+                    {searchTerm && <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded">البحث: {searchTerm}</span>}
+                    {sortBy && <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-800 rounded">الترتيب: {sortBy}</span>}
+
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Invoices Table */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            {filteredInvoices.length > 0 ? (
+            {loading ? (
+              <div className="p-8 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">جاري تحميل الفواتير...</p>
+              </div>
+            ) : filteredInvoices.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -869,6 +1236,9 @@ export default function InvoicesPage() {
                         التاريخ
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        اليوم
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         نوع البيع
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -876,6 +1246,10 @@ export default function InvoicesPage() {
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         المجموع
+                      </th>
+
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        الأموال المتاحة
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         الإجراءات
@@ -886,26 +1260,45 @@ export default function InvoicesPage() {
                     {filteredInvoices.map((invoice) => (
                       <tr key={invoice.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{invoice.invoice_number}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{invoice.customer_name}</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {invoice.invoice_number || 'N/A'}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {new Date(invoice.invoice_date).toLocaleDateString('ar-EG')}
+                            {invoice.customer_name || 'N/A'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('ar-EG') : 'N/A'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {invoice.invoice_date ? getArabicDayName(invoice.invoice_date) : 'N/A'}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {getSaleTypeLabel(invoice.sale_type)}
+                            {getSaleTypeLabel(invoice.sale_type || 'retail')}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{invoice.items_count} صنف</div>
+                          <div className="text-sm text-gray-900">
+                            {(invoice.items_count || 0)} صنف
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{formatCurrency(invoice.total_amount)}</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {formatCurrency(invoice.total_amount || 0)}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-indigo-600">
+                            {formatCurrency(invoice.available_funds || invoice.total_amount || 0)}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex gap-2">
@@ -933,8 +1326,32 @@ export default function InvoicesPage() {
             ) : (
               <div className="text-center py-12">
                 <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">لا توجد فواتير</h3>
-                <p className="mt-1 text-sm text-gray-500">ابدأ بإنشاء فاتورة جديدة</p>
+                <h3 className="mt-2 text-sm font-medium text-gray-900">
+                  {invoices.length === 0 ? 'لا توجد فواتير' : 'لا توجد نتائج للفلترة'}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {invoices.length === 0 ? 'ابدأ بإنشاء فاتورة جديدة' : 
+                   `لا توجد فواتير للتاريخ: ${dateFilter ? new Date(dateFilter).toLocaleDateString('ar-EG') : 'المحدد'}`}
+                </p>
+                {invoices.length === 0 ? (
+                  <button
+                    onClick={() => setShowCreateForm(true)}
+                    className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    إنشاء فاتورة جديدة
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setSearchTerm('')
+                      setDateFilter('')
+                      setSortBy('')
+                    }}
+                    className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  >
+                    إظهار جميع الفواتير
+                  </button>
+                )}
               </div>
             )}
           </div>

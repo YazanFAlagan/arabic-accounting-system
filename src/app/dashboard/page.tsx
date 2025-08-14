@@ -23,6 +23,7 @@ import QuickNavigation from '@/components/QuickNavigation'
 interface DashboardStats {
   totalSales: number
   totalExpenses: number
+  personalExpenses: number // المصروفات الشخصية
   netProfit: number
   totalProducts: number
   lowStockProducts: number
@@ -91,6 +92,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalSales: 0,
     totalExpenses: 0,
+    personalExpenses: 0,
     netProfit: 0,
     totalProducts: 0,
     lowStockProducts: 0,
@@ -164,43 +166,23 @@ export default function Dashboard() {
         // Calculate total sales from invoices only
         const totalSales = invoicesData.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0)
 
-        // Calculate total expenses from purchases
-        const totalExpenses = purchasesData.reduce((sum, purchase) => sum + (purchase.total_cost || 0), 0)
+        // Calculate total expenses from purchases (excluding personal expenses)
+        const totalExpenses = purchasesData
+          .filter(purchase => purchase.payment_method !== 'personal')
+          .reduce((sum, purchase) => sum + (purchase.total_cost || 0), 0)
 
-        // Calculate net profit
+        // Calculate personal expenses separately
+        const personalExpenses = purchasesData
+          .filter(purchase => purchase.payment_method === 'personal')
+          .reduce((sum, purchase) => sum + (purchase.total_cost || 0), 0)
+
+        // Calculate net profit (simplified and more accurate)
+        // صافي الربح = إجمالي المبيعات - إجمالي المصروفات
         const netProfit = totalSales - totalExpenses
-
-        // Calculate actual net profit (considering product costs)
-        let actualNetProfit = netProfit
-
-        // Subtract product costs from sales
-        if (invoicesData && productsData && invoicesData.length > 0) {
-          // Get invoice items for cost calculation
-          const { data: invoiceItemsData } = await supabase
-            .from('invoice_items')
-            .select('*')
-
-          if (invoiceItemsData) {
-            actualNetProfit = invoicesData.reduce((totalProfit, invoice) => {
-              const items = invoiceItemsData.filter(item => item.invoice_id === invoice.id)
-              return totalProfit + items.reduce((itemProfit, item) => {
-                const product = productsData.find(p => p.id === item.product_id)
-                if (product && product.wholesale_price) {
-                  const costPrice = product.wholesale_price
-                  const unitPrice = item.unit_price
-                  const quantity = parseInt(item.quantity) || 0
-                  const itemProfit = (unitPrice - costPrice) * quantity
-                  if (!isNaN(itemProfit) && isFinite(itemProfit)) {
-                    return totalProfit + itemProfit
-                  }
-                }
-                return totalProfit
-              }, 0)
-            }, 0)
-          }
-        }
-
-        const netProfitFinal = isNaN(actualNetProfit) ? 0 : actualNetProfit
+        
+        // For now, use simple calculation until we have proper cost data
+        // في الوقت الحالي، نستخدم الحساب البسيط حتى نحصل على بيانات التكلفة الصحيحة
+        const netProfitFinal = netProfit
         const totalProducts = productsData?.length || 0
         const lowStockProducts = productsData?.filter(product => 
           product.current_stock <= product.min_stock_alert
@@ -227,9 +209,20 @@ export default function Dashboard() {
         const myShare = remainingFunds > 0 ? remainingFunds * 0.45 : 0; // 45% of remaining funds
         const mahmoudShare = remainingFunds > 0 ? remainingFunds * 0.45 : 0; // 45% of remaining funds
 
+        // Log the calculation details for debugging
+        console.log('تفاصيل حساب صافي الربح:', {
+          totalSales,
+          totalExpenses,
+          personalExpenses,
+          netProfit: netProfitFinal,
+          calculation: `${totalSales} - ${totalExpenses} = ${netProfitFinal}`,
+          note: 'المصروفات الشخصية لا تدخل في حساب صافي الربح'
+        })
+
         setStats({
           totalSales,
           totalExpenses,
+          personalExpenses,
           netProfit: netProfitFinal,
           totalProducts,
           lowStockProducts,
@@ -366,6 +359,18 @@ export default function Dashboard() {
               icon={<BarChart3 className="h-8 w-8" />}
               color={stats.netProfit >= 0 ? 'green' : 'red'}
             />
+            {/* تعليق توضيحي لحساب صافي الربح */}
+            <div className="col-span-full bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+              <div className="flex items-center">
+                <svg className="h-5 w-5 text-blue-600 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-blue-800">
+                  <strong>ملاحظة:</strong> صافي الربح = إجمالي المبيعات - إجمالي المصروفات (بدون المصروفات الشخصية). 
+                  المصروفات الشخصية معروضة في خانة منفصلة.
+                </p>
+              </div>
+            </div>
             <StatCard
               title="حصة الشريك الثالث (ربنا)"
               value={formatCurrency(stats.godShare)}
@@ -375,7 +380,7 @@ export default function Dashboard() {
           </div>
 
           {/* Secondary Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8">
             <StatCard
               title="عدد المنتجات"
               value={stats.totalProducts.toString()}
@@ -395,6 +400,12 @@ export default function Dashboard() {
               color="blue"
             />
             <StatCard
+              title="المصروفات الشخصية"
+              value={formatCurrency(stats.personalExpenses)}
+              icon={<CreditCard className="h-8 w-8" />}
+              color="orange"
+            />
+            <StatCard
               title="تنبيهات المخزون"
               value={stats.lowStockProducts.toString()}
               icon={<AlertTriangle className="h-8 w-8" />}
@@ -408,7 +419,7 @@ export default function Dashboard() {
               <BarChart3 className="h-10 w-10 ml-4 text-indigo-600" />
               الإجراءات السريعة
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               <Link
                 href="/sales"
                 className="group p-8 bg-gradient-to-br from-green-50 to-green-100 rounded-3xl border border-green-200 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 text-center"
@@ -436,14 +447,7 @@ export default function Dashboard() {
                 <p className="text-purple-700">إدارة المنتجات والمخزون</p>
               </Link>
               
-              <Link
-                href="/debts"
-                className="group p-8 bg-gradient-to-br from-orange-50 to-orange-100 rounded-3xl border border-orange-200 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 text-center"
-              >
-                <CreditCard className="h-16 w-16 text-orange-600 mx-auto mb-4 group-hover:scale-110 transition-transform duration-300" />
-                <h4 className="text-xl font-bold text-orange-800 mb-2">إدارة الديون</h4>
-                <p className="text-orange-700">تتبع الديون والذمم المدينة</p>
-              </Link>
+
             </div>
           </div>
 

@@ -98,30 +98,73 @@ export default function DebtsPage() {
   const fetchData = async () => {
     try {
       setLoading(true)
+      console.log('Fetching data...')
       
       // Fetch entities
-      const { data: entitiesData } = await supabase
+      console.log('Fetching entities...')
+      const { data: entitiesData, error: entitiesError } = await supabase
         .from('debt_entities')
         .select('*')
         .order('name')
       
-      if (entitiesData) setEntities(entitiesData)
+      if (entitiesError) {
+        console.error('Error fetching entities:', entitiesError)
+      } else {
+        console.log('Entities fetched:', entitiesData)
+        setEntities(entitiesData || [])
+      }
 
       // Fetch debts with entity names
-      const { data: debtsData } = await supabase
+      console.log('Fetching debts...')
+      const { data: debtsData, error: debtsError } = await supabase
         .from('debt_summary')
         .select('*')
         .order('created_at', { ascending: false })
       
-      if (debtsData) setDebts(debtsData)
+      if (debtsError) {
+        console.error('Error fetching debts:', debtsError)
+        // Try to fetch from base table if view doesn't exist
+        const { data: baseDebtsData, error: baseDebtsError } = await supabase
+          .from('debts')
+          .select('*')
+          .order('created_at', { ascending: false })
+        
+        if (baseDebtsError) {
+          console.error('Error fetching from base debts table:', baseDebtsError)
+        } else {
+          console.log('Base debts fetched:', baseDebtsData)
+          setDebts(baseDebtsData || [])
+        }
+      } else {
+        console.log('Debts fetched:', debtsData)
+        setDebts(debtsData || [])
+      }
 
       // Fetch transactions
-      const { data: transactionsData } = await supabase
+      console.log('Fetching transactions...')
+      const { data: transactionsData, error: transactionsError } = await supabase
         .from('debt_transactions_summary')
         .select('*')
         .order('created_at', { ascending: false })
       
-      if (transactionsData) setTransactions(transactionsData)
+      if (transactionsError) {
+        console.error('Error fetching transactions:', transactionsError)
+        // Try to fetch from base table if view doesn't exist
+        const { data: baseTransactionsData, error: baseTransactionsError } = await supabase
+          .from('debt_transactions')
+          .select('*')
+          .order('created_at', { ascending: false })
+        
+        if (baseTransactionsError) {
+          console.error('Error fetching from base transactions table:', baseTransactionsError)
+        } else {
+          console.log('Base transactions fetched:', baseTransactionsData)
+          setTransactions(baseTransactionsData || [])
+        }
+      } else {
+        console.log('Transactions fetched:', transactionsData)
+        setTransactions(transactionsData || [])
+      }
 
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -133,94 +176,149 @@ export default function DebtsPage() {
   const handleEntitySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      console.log('Submitting entity form:', entityForm)
+      console.log('User ID:', user?.id)
+      
       if (editingEntity) {
-        const { error } = await supabase
+        console.log('Updating existing entity...')
+        const { data, error } = await supabase
           .from('debt_entities')
           .update({ ...entityForm, updated_at: new Date().toISOString() })
           .eq('id', editingEntity.id)
+          .select()
         
-        if (error) throw error
+        if (error) {
+          console.error('Update error:', error)
+          throw error
+        }
+        console.log('Update successful:', data)
       } else {
-        const { error } = await supabase
+        console.log('Inserting new entity...')
+        const { data, error } = await supabase
           .from('debt_entities')
           .insert([{ ...entityForm, user_id: user?.id }])
+          .select()
         
-        if (error) throw error
+        if (error) {
+          console.error('Insert error:', error)
+          throw error
+        }
+        console.log('Insert successful:', data)
       }
       
+      alert(editingEntity ? 'تم تحديث الشخص/الجهة بنجاح!' : 'تم إضافة الشخص/الجهة بنجاح!')
       setShowEntityModal(false)
       setEditingEntity(null)
       setEntityForm({ name: '', type: 'individual', phone: '', email: '', address: '', notes: '' })
       fetchData()
     } catch (error) {
       console.error('Error saving entity:', error)
+      alert('حدث خطأ في حفظ الشخص/الجهة: ' + (error as Error).message)
     }
   }
 
   const handleDebtSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      console.log('Submitting debt form:', debtForm)
+      console.log('User ID:', user?.id)
+      
       const debtData = {
         ...debtForm,
         original_amount: parseFloat(debtForm.original_amount),
         current_balance: parseFloat(debtForm.original_amount),
         user_id: user?.id
       }
+      
+      console.log('Processed debt data:', debtData)
 
       if (editingDebt) {
-        const { error } = await supabase
+        console.log('Updating existing debt...')
+        const { data, error } = await supabase
           .from('debts')
           .update({ ...debtData, updated_at: new Date().toISOString() })
           .eq('id', editingDebt.id)
+          .select()
         
-        if (error) throw error
+        if (error) {
+          console.error('Update error:', error)
+          throw error
+        }
+        console.log('Update successful:', data)
       } else {
-        const { error } = await supabase
+        console.log('Inserting new debt...')
+        const { data, error } = await supabase
           .from('debts')
           .insert([debtData])
+          .select()
         
-        if (error) throw error
+        if (error) {
+          console.error('Insert error:', error)
+          throw error
+        }
+        console.log('Insert successful:', data)
       }
       
+      alert(editingDebt ? 'تم تحديث الدين بنجاح!' : 'تم إضافة الدين بنجاح!')
       setShowDebtModal(false)
       setEditingDebt(null)
       setDebtForm({ entity_id: '', debt_type: 'owed_to_me', original_amount: '', currency: 'EGP', due_date: '', description: '', category: 'general', priority: 'normal' })
       fetchData()
     } catch (error) {
       console.error('Error saving debt:', error)
+      alert('حدث خطأ في حفظ الدين: ' + (error as Error).message)
     }
   }
 
   const handleTransactionSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      console.log('Submitting transaction form:', transactionForm)
+      console.log('User ID:', user?.id)
+      
       const transactionData = {
         ...transactionForm,
         amount: parseFloat(transactionForm.amount),
         user_id: user?.id
       }
+      
+      console.log('Processed transaction data:', transactionData)
 
       if (editingTransaction) {
-        const { error } = await supabase
+        console.log('Updating existing transaction...')
+        const { data, error } = await supabase
           .from('debt_transactions')
           .update({ ...transactionData, updated_at: new Date().toISOString() })
           .eq('id', editingTransaction.id)
+          .select()
         
-        if (error) throw error
+        if (error) {
+          console.error('Update error:', error)
+          throw error
+        }
+        console.log('Update successful:', data)
       } else {
-        const { error } = await supabase
+        console.log('Inserting new transaction...')
+        const { data, error } = await supabase
           .from('debt_transactions')
           .insert([transactionData])
+          .select()
         
-        if (error) throw error
+        if (error) {
+          console.error('Insert error:', error)
+          throw error
+        }
+        console.log('Insert successful:', data)
       }
       
+      alert(editingTransaction ? 'تم تحديث المعاملة بنجاح!' : 'تم إضافة المعاملة بنجاح!')
       setShowTransactionModal(false)
       setEditingTransaction(null)
       setTransactionForm({ debt_id: '', transaction_type: 'payment', amount: '', payment_method: 'cash', reference_number: '', transaction_date: new Date().toISOString().split('T')[0], notes: '' })
       fetchData()
     } catch (error) {
       console.error('Error saving transaction:', error)
+      alert('حدث خطأ في حفظ المعاملة: ' + (error as Error).message)
     }
   }
 

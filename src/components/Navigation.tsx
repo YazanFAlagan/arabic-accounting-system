@@ -20,12 +20,10 @@ import {
 
 const navigationItems = [
   { name: 'لوحة التحكم', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'المبيعات', href: '/sales', icon: ShoppingCart },
   { name: 'المشتريات والمصروفات', href: '/purchases', icon: DollarSign },
   { name: 'المخزون', href: '/inventory', icon: Package },
   { name: 'الأرباح والخسائر', href: '/profit-loss', icon: TrendingUp },
   { name: 'الأكثر مبيعاً', href: '/best-sellers', icon: BarChart3 },
-  { name: 'إدارة الديون', href: '/debts', icon: CreditCard },
   { name: 'التقارير', href: '/reports', icon: FileText },
 ]
 
