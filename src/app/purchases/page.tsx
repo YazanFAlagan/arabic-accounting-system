@@ -197,6 +197,60 @@ export default function PurchasesPage() {
         if (!data || data.length === 0) {
           throw new Error('لم يتم حفظ البيانات')
         }
+
+        // 🔗 ربط المشتريات بمخزون المواد الخام
+        // إذا كان نوع المشتريات مادة خام، قم بإضافتها إلى مخزون المواد الخام
+        if (purchaseType === 'raw_material') {
+          try {
+            // تحقق من وجود المادة الخام في المخزون
+            const { data: existingMaterial, error: checkError } = await supabase
+              .from('raw_materials')
+              .select('id, current_stock')
+              .eq('name', formData.product_name)
+              .eq('user_id', user.id)
+              .single()
+
+            if (checkError && checkError.code !== 'PGRST116') {
+              throw checkError
+            }
+
+            if (existingMaterial) {
+              // تحديث المخزون الموجود
+              const newStock = existingMaterial.current_stock + formData.quantity
+              const { error: updateError } = await supabase
+                .from('raw_materials')
+                .update({
+                  current_stock: newStock,
+                  unit_cost: formData.unit_cost,
+                  supplier_name: formData.supplier_name,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingMaterial.id)
+
+              if (updateError) throw updateError
+            } else {
+              // إضافة مادة خام جديدة
+              const { error: insertError } = await supabase
+                .from('raw_materials')
+                .insert([{
+                  name: formData.product_name,
+                  unit: formData.unit,
+                  current_stock: formData.quantity,
+                  min_stock_alert: formData.min_stock_alert,
+                  unit_cost: formData.unit_cost,
+                  supplier_name: formData.supplier_name,
+                  description: formData.notes,
+                  user_id: user.id
+                }])
+
+              if (insertError) throw insertError
+            }
+          } catch (rawMaterialError) {
+            console.error('Error updating raw materials inventory:', rawMaterialError)
+            // لا نوقف العملية إذا فشل تحديث المخزون، فقط نعرض تحذير
+            alert('تم حفظ المشتريات بنجاح، لكن حدث خطأ في تحديث مخزون المواد الخام. يرجى التحقق من المخزون يدوياً.')
+          }
+        }
         
         alert('تمت إضافة المشتريات بنجاح')
       }
@@ -263,13 +317,55 @@ export default function PurchasesPage() {
     if (!confirm('هل أنت متأكد من حذف هذا السجل؟')) return
 
     try {
+      // احصل على بيانات المشتريات قبل الحذف
+      const purchaseToDelete = purchases.find(p => p.id === purchaseId)
+      
       const { error } = await supabase
         .from('purchases')
         .delete()
         .eq('id', purchaseId)
 
       if (error) throw error
+
+      // 🔗 تحديث مخزون المواد الخام عند حذف المشتريات
+      // إذا كان نوع المشتريات مادة خام، قم بتحديث المخزون
+      if (purchaseToDelete && purchaseToDelete.type === 'raw_material' && purchaseToDelete.quantity && user?.id) {
+        try {
+          // تحقق من وجود المادة الخام في المخزون
+          const { data: existingMaterial, error: checkError } = await supabase
+            .from('raw_materials')
+            .select('id, current_stock')
+            .eq('name', purchaseToDelete.product_name)
+            .eq('user_id', user.id)
+            .single()
+
+          if (checkError && checkError.code !== 'PGRST116') {
+            throw checkError
+          }
+
+          if (existingMaterial) {
+            // تحديث المخزون عند الحذف
+            const newStock = Math.max(0, existingMaterial.current_stock - purchaseToDelete.quantity)
+            const { error: updateError } = await supabase
+              .from('raw_materials')
+              .update({
+                current_stock: newStock,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingMaterial.id)
+
+            if (updateError) {
+              console.error('Error updating raw materials inventory on delete:', updateError)
+            }
+          }
+        } catch (rawMaterialError) {
+          console.error('Error updating raw materials inventory on delete:', rawMaterialError)
+          // لا نوقف العملية إذا فشل تحديث المخزون
+        }
+      }
+
       fetchPurchases()
+      alert('تم حذف المشتريات بنجاح')
     } catch (error) {
       console.error('Error deleting purchase:', error)
       alert('حدث خطأ في حذف البيانات')
@@ -334,6 +430,14 @@ export default function PurchasesPage() {
                 المشتريات والمصروفات
               </h1>
               <p className="text-gray-600 mt-2">إدارة المشتريات والمصروفات والمواد الخام</p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-3">
+                <div className="flex items-center text-sm text-green-800">
+                  <svg className="h-4 w-4 ml-2 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span>💡 شراء المواد الخام يُحدث المخزون تلقائياً في صفحة المواد الخام</span>
+                </div>
+              </div>
             </div>
             
             <button
@@ -477,7 +581,7 @@ export default function PurchasesPage() {
                       required
                     >
                       <option value="product">شراء منتج</option>
-                      <option value="raw_material">مادة خام جديدة</option>
+                      <option value="raw_material">مادة خام جديدة (يُحدث المخزون تلقائياً)</option>
                       <option value="expense">مصروف</option>
                     </select>
                   </div>
@@ -520,20 +624,25 @@ export default function PurchasesPage() {
                 )}
 
                 {(formData.type === 'expense' || formData.type === 'raw_material' || editingPurchase) && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {formData.type === 'product' ? 'اسم المنتج' : 
-                       formData.type === 'raw_material' ? 'اسم المادة الخام' : 'وصف المصروف'}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.product_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, product_name: e.target.value }))}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder={formData.type === 'raw_material' ? 'مثال: زجاجات فارغة، ملصقات، زيت عطري' : ''}
-                      required
-                    />
-                  </div>
+                                  <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {formData.type === 'product' ? 'اسم المنتج' : 
+                     formData.type === 'raw_material' ? 'اسم المادة الخام' : 'وصف المصروف'}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.product_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, product_name: e.target.value }))}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder={formData.type === 'raw_material' ? 'مثال: زجاجات فارغة، ملصقات، زيت عطري' : ''}
+                    required
+                  />
+                  {formData.type === 'raw_material' && (
+                    <p className="text-xs text-green-600 mt-1">
+                      💡 سيتم إضافة هذه المادة تلقائياً إلى مخزون المواد الخام
+                    </p>
+                  )}
+                </div>
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
